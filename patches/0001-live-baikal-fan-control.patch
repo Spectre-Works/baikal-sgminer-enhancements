@@ -1,0 +1,82 @@
+diff --git a/driver-baikalu.c b/driver-baikalu.c
+index ad29f43..6c92a44 100644
+--- a/driver-baikalu.c
++++ b/driver-baikalu.c
+@@ -11,8 +11,10 @@
+ 
+ #include "config.h"
+ 
++#include <errno.h>
+ #include <stdarg.h>
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <math.h>
+ #include <pthread.h>
+@@ -263,6 +265,58 @@ static bool baikal_setoption(struct cgpu_info *baikal, uint16_t clk, uint8_t mod
+ }
+ 
+ 
++static char *baikal_set_device(struct cgpu_info *baikal, char *option, char *setting, char *replybuf)
++{
++    struct baikal_info *info = baikal->device_data;
++    char *end;
++    long fanspeed;
++    int i;
++
++    if (strcasecmp(option, "help") == 0) {
++        sprintf(replybuf, "fan: set fan speed (0-100)");
++        return replybuf;
++    }
++
++    if (strcasecmp(option, "fan") != 0) {
++        return "Unknown option";
++    }
++
++    if (setting == NULL || *setting == '\0') {
++        return "Fan must be an integer from 0 to 100";
++    }
++
++    errno = 0;
++    fanspeed = strtol(setting, &end, 10);
++    if (errno != 0 || end == setting || *end != '\0' ||
++        fanspeed < 0 || fanspeed > BAIKAL_FANSPEED_MAX) {
++        return "Fan must be an integer from 0 to 100";
++    }
++
++    /* All logical miners on one controller share baikal_info.  Send the
++     * complete option tuple to each detected miner so changing the fan does
++     * not overwrite that board's current clock, algorithm, or cutoff. */
++    for (i = 0; i < total_devices; i++) {
++        struct cgpu_info *board = get_devices(i);
++        struct miner_info *miner;
++
++        if (board == NULL || board->drv->drv_id != DRIVER_baikalu ||
++            board->device_data != info) {
++            continue;
++        }
++
++        miner = &info->miners[board->miner_id];
++        if (!baikal_setoption(board, miner->clock,
++                    to_baikal_algorithm(board->algorithm.type),
++                    info->cutofftemp, (uint8_t)fanspeed)) {
++            return "Failed to set fan speed on all Baikal boards";
++        }
++    }
++
++    info->fanspeed = (uint8_t)fanspeed;
++    return NULL;
++}
++
++
+ static bool baikal_setidle(struct cgpu_info *baikal)
+ {
+     int amount;
+@@ -951,6 +1005,7 @@ struct device_drv baikalu_drv = {
+     .get_statline_before	= baikal_get_statline_before,
+     .get_api_stats			= baikal_api_stats,
+     .identify_device		= baikal_identify,
++	.set_device            = baikal_set_device,
+     .thread_prepare			= baikal_prepare,
+     .thread_init			= baikal_init,
+     .hash_work              = hash_driver_work,
