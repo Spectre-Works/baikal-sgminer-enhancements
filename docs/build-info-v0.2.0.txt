@@ -1,0 +1,55 @@
+Baikal BK-B automatic fan control v0.2.0
+Release date: 2026-10-07 (America/Denver)
+Repository: https://github.com/Spectre-Works/baikal-sgminer-enhancements
+Upstream: https://github.com/cod3gen/sgminer-baikal
+Upstream commit: 3cde8deca53f83ac65bc685b988166bd17930753
+Changes: cumulative patches/0002-automatic-baikal-fan-control.patch;
+         driver-baikal.h model default BAIKAL_CLK_DEF=400 for BK-B.
+Excluded: experimental clock/overclock patch and API, private miner configuration.
+
+Binary: sgminer-baikal-bkb-fan-v0.2.0-armhf
+SHA-256: 7ed2720baeba0bfccd7c48d9ba2ad57d760fbea22b28faf888694158f56c406e
+Build ID: f90119ce30ad1c3b9a39ebf52222beff1e1f1588
+Upstream version string: 5.6.2-BK_cod3gen_MOD
+ELF: 32-bit little-endian ARM EABI5, ARMv7 application profile, hard-float ABI.
+Interpreter: /lib/ld-linux-armhf.so.3
+OS: existing BK-B controller Ubuntu 16.04.2 LTS, armv7l.
+Compiler: gcc (Ubuntu/Linaro 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609.
+Runtime glibc: Ubuntu GLIBC 2.23-0ubuntu11.3.
+Build: existing native configured build tree, CFLAGS=-g -O2, CPPFLAGS empty;
+       make -j1 CPPFLAGS=.
+Configure arguments recorded by config.status --config: none.
+New source/header-dependent modules were compiled and executable relinked;
+unchanged cached objects and bundled libraries were reused. This is not a
+bit-for-bit clean/reproducible-build claim. Complete corresponding sources,
+including bundled dependency sources and their licenses, accompany the binary.
+The source archive omits cached binary objects/libraries and configuration logs.
+
+Core dynamic dependencies (all resolved on build device):
+libcurl.so.4, libpthread.so.0, libudev.so.1, librt.so.1, libm.so.6,
+libncurses.so.5, libtinfo.so.5, libc.so.6.
+Transitive dependencies include libssl.so.1.0.0, libcrypto.so.1.0.0,
+libidn.so.11, librtmp.so.1, libgnutls.so.30 and LDAP/Kerberos libraries.
+System libraries are not bundled. Run ldd on your matching ARM controller;
+do not assume compatibility with modern ARM64 or other miner environments.
+
+Source file SHA-256 values verified against native build inputs:
+driver-baikalu.c e69807d90c7e790d06553fc2b24a4d603504551c1ecb1f5682032327d90d8aef
+driver-baikal.h 00d8f5e39e168f73f09f49692aae93106d66b1a5b6b5440cdb87edd46c60d493
+baikal-fan-policy.h 7e27cae88cd88cc5ece7c53987a8f6eecb0589e64584a7c6d5683eaaa04004cb
+tests/baikal-fan-test.c 3c52131591c46d6038071c8f97068cb04d7b7eecb0cd4ced22ef5107dad1b2f4
+
+Startup defaults: requested clock 400; cutoff 55C; recovery 40C; fan 100%.
+Existing configuration can override fan/thermal options. Automatic mode is
+runtime-only and must be enabled after each restart. No live clock API exists.
+Reported 480MHz is controller response 240 doubled; not proven physical OC.
+
+Validation: fan-only mock-USB driver/policy tests passed natively; executable
+linked, --version passed, ARM ABI inspected, ldd resolved dependencies, and
+experimental clock messages absent. Same fan logic was exercised on a live
+three-board BK-B; operator reported successful operation/testing. New release
+binary was not installed or run for mining during release preparation.
+Legacy upstream version/prototype warnings remain. Fault injection is offline.
+
+License: GPL-3.0 miner changes; bundled upstream/dependency notices retained.
+No firmware flashing, live restart, setting change, or deployment for packaging.

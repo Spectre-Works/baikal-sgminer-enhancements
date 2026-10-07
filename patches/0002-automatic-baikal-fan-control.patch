@@ -1,0 +1,801 @@
+diff --git a/Makefile.am b/Makefile.am
+index a94dfe3..56f4f9d 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -51,6 +51,7 @@ sgminer_SOURCES += pool.c pool.h
+ sgminer_SOURCES += algorithm.c algorithm.h
+ sgminer_SOURCES += config_parser.c config_parser.h
+ sgminer_SOURCES += events.c events.h
++sgminer_SOURCES += baikal-fan-policy.h
+ 
+ sgminer_SOURCES += algorithm/scrypt.c algorithm/scrypt.h
+ sgminer_SOURCES += algorithm/darkcoin.c algorithm/darkcoin.h
+@@ -106,4 +107,3 @@ endif
+ 
+ bin_SCRIPTS	= $(top_srcdir)/kernel/*.cl
+ bin_SCRIPTS	+= $(top_srcdir)/kernel/*.h
+-
+diff --git a/driver-baikal.h b/driver-baikal.h
+index 944b084..5267b55 100644
+--- a/driver-baikal.h
++++ b/driver-baikal.h
+@@ -2,6 +2,7 @@
+ #define __DEVICE_BAIKAL_H__
+ 
+ #include "miner.h"
++#include "baikal-fan-policy.h"
+ 
+ #define BAIKAL_1751             (0x1)
+ #define BAIKAL_1772             (0x2)
+@@ -60,6 +61,12 @@ struct miner_info {
+     int     unit_count;
+ 	int		temp;  
+     int     clock;
++    uint8_t option_clock; /* Last requested raw selector, not reported MHz. */
++    uint8_t option_mode;
++    uint8_t option_cutoff;
++    bool option_valid;
++    uint64_t temperature_seen;
++    bool temperature_valid;
+     int     bbg;
+     bool    working;
+     bool    overheated;
+@@ -86,6 +93,20 @@ struct baikal_info {
+ 	pthread_t *process_thr;
+     struct miner_info miners[BAIKAL_MAXMINERS];    
+     uint8_t miner_type;
++    /* USB fan control; all accesses protected by the shared USB mutex. */
++    struct cgpu_info *fan_boards[BAIKAL_MAXMINERS];
++    bool fan_auto;
++    bool fan_pending;
++    bool fan_fault;
++    bool fan_telemetry_bad;
++    bool fan_applied_valid;
++    uint8_t fan_requested;
++    int fan_hottest;
++    uint64_t fan_retry_after;
++    pthread_t fan_thread;
++    bool fan_thread_started;
++    bool fan_stop;
++    struct baikal_fan_policy fan_policy;
+ };
+ 
+ typedef struct {
+diff --git a/driver-baikalu.c b/driver-baikalu.c
+index ad29f43..ddf34a3 100644
+--- a/driver-baikalu.c
++++ b/driver-baikalu.c
+@@ -11,6 +11,8 @@
+ 
+ #include "config.h"
+ 
++#include <errno.h>
++#include <stdlib.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -29,6 +31,18 @@
+ int thecounter = 0; // Added for debug 26.03.18
+ 
+ static int api_clock = BAIKAL_CLK_DEF;
++static void baikal_fan_tick(struct cgpu_info *baikal, bool transport_failed);
++
++static uint64_t baikal_fan_now(void)
++{
++    cgtimer_t now;
++    cgtimer_time(&now);
++#ifdef WIN32
++    return (uint64_t)(now.QuadPart / 10000000LL);
++#else
++    return (uint64_t)now.tv_sec;
++#endif
++}
+ 
+ static int baikal_sendmsg(struct cgpu_info *baikal, baikal_msg *msg)
+ {
+@@ -69,7 +83,7 @@ static int baikal_readmsg(struct cgpu_info *baikal, baikal_msg *msg, int size)
+ 
+     err = usb_read_once(baikal, (char *)buf, size, &amount, C_BAIKAL_READ);
+     if (err < 0 || amount < 7) {
+-        return (err);
++        return err < 0 ? err : -1;
+     }
+ 
+     if ((buf[0] != ':') || (buf[amount - 2] != '\r') || (buf[amount - 1] != '\n')) {
+@@ -98,6 +112,12 @@ static void baikal_cleanup(struct cgpu_info *baikal)
+     struct cgpu_info *tmp;
+     struct thr_info *thr;
+ 
++    /* Also cover send-work failures reached through update_work. */
++    baikal_fan_tick(baikal, true);
++    mutex_lock(baikal->mutex);
++    info->fan_stop = true;
++    mutex_unlock(baikal->mutex);
++
+     for (i = 0; i < info->miner_count; i++) {
+         miner  = &info->miners[i];
+         thr = mining_thr[miner->thr_id];
+@@ -176,6 +196,10 @@ static bool baikal_reset(struct cgpu_info *baikal)
+     }
+ 
+     info->miner_count = msg.param;
++    if (info->miner_count < 1 || info->miner_count > BAIKAL_MAXMINERS) {
++        mutex_unlock(baikal->mutex);
++        return false;
++    }
+ 
+     mutex_unlock(baikal->mutex);
+ 
+@@ -229,37 +253,202 @@ static bool baikal_getinfo(struct cgpu_info *baikal)
+ }
+ 
+ 
+-static bool baikal_setoption(struct cgpu_info *baikal, uint16_t clk, uint8_t mode, uint8_t temp, uint8_t fanspeed)
++/* Caller holds the shared USB mutex; selector is the exact requested byte. */
++static bool baikal_option_locked(struct cgpu_info *baikal, uint8_t selector,
++                                 uint8_t mode, uint8_t temp, uint8_t fanspeed)
+ {
+     int amount;
+     baikal_msg msg = {0, };
+ 
+     msg.miner_id    = baikal->miner_id;
+     msg.cmd         = BAIKAL_SET_OPTION;
+-    msg.data[0] = (clk == 0) ? clk : ((clk / 10) % 20) + 2;
++    msg.data[0] = selector;
+     msg.data[1] = mode;
+     msg.data[2] = temp;
+     msg.data[3] = fanspeed;
+     msg.dest        = 0;
+     msg.len         = 4;
+ 
+-    mutex_lock(baikal->mutex);
+-
+     amount = baikal_sendmsg(baikal, &msg);
+-    if (amount < 0) {
+-        mutex_unlock(baikal->mutex);
++    if (amount != 15) {
+         return (false);
+     }
+ 
+     amount = baikal_readmsg(baikal, &msg, 7);
+-    if (amount < 0) {
+-        mutex_unlock(baikal->mutex);
++    if (amount != 7 || msg.miner_id != baikal->miner_id ||
++        msg.cmd != BAIKAL_SET_OPTION || msg.len != 0) {
+         return (false);
+     }
+ 
++    return (true);
++}
++
++static bool baikal_setoption(struct cgpu_info *baikal, uint16_t clk,
++                            uint8_t mode, uint8_t temp, uint8_t fanspeed)
++{
++    struct baikal_info *info = baikal->device_data;
++    struct miner_info *miner = &info->miners[baikal->miner_id];
++    uint8_t selector = clk == 0 ? 0 : ((clk / 10) % 20) + 2;
++    bool ok;
++    mutex_lock(baikal->mutex);
++    ok = baikal_option_locked(baikal, selector, mode, temp, fanspeed);
++    if (ok) {
++        miner->option_clock = selector;
++        miner->option_mode = mode;
++        miner->option_cutoff = temp;
++        miner->option_valid = true;
++    }
+     mutex_unlock(baikal->mutex);
++    return ok;
++}
+ 
+-    return (true);
++/* Complete the broadcast even if one board fails; preserve every tuple. */
++static bool baikal_fan_apply_locked(struct cgpu_info *baikal, uint8_t fan)
++{
++    struct baikal_info *info = baikal->device_data;
++    int i;
++    bool ok = true;
++    info->fan_applied_valid = false;
++    for (i = 0; i < info->miner_count; i++) {
++        struct miner_info *miner = &info->miners[i];
++        struct cgpu_info *board = info->fan_boards[i];
++        if (!board || !miner->option_valid || board->usbinfo.nodev ||
++            !baikal_option_locked(board, miner->option_clock,
++                                  miner->option_mode, miner->option_cutoff, fan))
++            ok = false;
++    }
++    if (ok) {
++        info->fanspeed = fan;
++        info->fan_applied_valid = true;
++    }
++    return ok;
++}
++
++static void baikal_fan_tick(struct cgpu_info *baikal, bool transport_failed)
++{
++    struct baikal_info *info = baikal->device_data;
++    uint64_t now = baikal_fan_now();
++    bool valid = !transport_failed;
++    int hottest = 0, target, previous, i;
++    mutex_lock(baikal->mutex);
++    for (i = 0; i < info->miner_count; i++) {
++        struct miner_info *miner = &info->miners[i];
++        if (!info->fan_boards[i] || !miner->temperature_valid ||
++            now - miner->temperature_seen >= BAIKAL_FAN_STALE_SECONDS)
++            valid = false;
++        if (miner->temperature_valid && miner->temp > hottest)
++            hottest = miner->temp;
++    }
++    info->fan_hottest = valid ? hottest : -1;
++    if (info->fan_auto && info->fan_telemetry_bad != !valid) {
++        info->fan_telemetry_bad = !valid;
++        applog(valid ? LOG_NOTICE : LOG_WARNING,
++               "Baikal fan telemetry %s; hottest=%dC",
++               valid ? "recovered" : "missing/stale/invalid: forcing 100%", hottest);
++    }
++    if (transport_failed) info->fan_fault = true;
++    if (!info->fan_auto && !info->fan_pending && !info->fan_fault) {
++        mutex_unlock(baikal->mutex);
++        return;
++    }
++    previous = info->fanspeed;
++    target = info->fan_requested;
++    if (info->fan_auto)
++        target = baikal_fan_next(&info->fan_policy, previous, hottest, valid, now);
++    if (info->fan_fault || (info->fan_auto && !valid)) target = 100;
++    if (info->fan_auto || info->fan_fault) info->fan_requested = target;
++    if (now < info->fan_retry_after) {
++        mutex_unlock(baikal->mutex);
++        return;
++    }
++    if (info->fan_pending || !info->fan_applied_valid || target != previous) {
++        bool ok = baikal_fan_apply_locked(baikal, target);
++        if (!ok) {
++            info->fan_fault = true;
++            info->fan_policy.cooling = false;
++            ok = baikal_fan_apply_locked(baikal, 100);
++            info->fan_retry_after = now + 5;
++            applog(LOG_ERR, "Baikal fan update failed; 100%% fallback %s; clock/algorithm/cutoff preserved",
++                   ok ? "acknowledged" : "unconfirmed (USB unavailable)");
++        } else {
++            applog(LOG_NOTICE, "Baikal fan: %s hottest=%dC duty=%d->%d%% telemetry=%s",
++                   info->fan_fault ? "fault" : (info->fan_auto ? "auto" : "manual"),
++                   hottest, previous, target, valid ? "valid" : "invalid");
++        }
++    }
++    info->fan_pending = false;
++    mutex_unlock(baikal->mutex);
++}
++
++static char *baikal_set_device(struct cgpu_info *baikal, char *option,
++                             char *setting, char *replybuf)
++{
++    struct baikal_info *info = baikal->device_data;
++    char *end;
++    long fan;
++    if (!strcasecmp(option, "help")) {
++        sprintf(replybuf, "fan: 0-100 (manual); fan-auto: on/off; fan-reset: yes (clear USB fault after recovery). Changes queued; query stats for acknowledgement.");
++        return replybuf;
++    }
++    if (!strcasecmp(option, "fan-auto")) {
++        if (!setting || (strcasecmp(setting, "on") && strcasecmp(setting, "off")))
++            return "fan-auto must be on or off";
++        mutex_lock(baikal->mutex);
++        info->fan_auto = !strcasecmp(setting, "on");
++        info->fan_requested = info->fanspeed;
++        info->fan_pending = true;
++        info->fan_policy.cooling = false;
++        mutex_unlock(baikal->mutex);
++        return NULL;
++    }
++    if (!strcasecmp(option, "fan-reset")) {
++        if (!setting || strcasecmp(setting, "yes")) return "fan-reset must be yes";
++        mutex_lock(baikal->mutex);
++        bool healthy = info->fan_applied_valid && info->fan_hottest > 0 && info->fan_hottest < 51;
++        uint64_t now = baikal_fan_now();
++        for (int i = 0; i < info->miner_count; i++)
++            if (!info->fan_boards[i] || !info->miners[i].temperature_valid ||
++                now - info->miners[i].temperature_seen >= BAIKAL_FAN_STALE_SECONDS)
++                healthy = false;
++        if (!healthy) {
++            mutex_unlock(baikal->mutex);
++            return "Fresh healthy telemetry and an acknowledged fan setting required";
++        }
++        info->fan_fault = false;
++        info->fan_pending = true;
++        mutex_unlock(baikal->mutex);
++        return NULL;
++    }
++    if (strcasecmp(option, "fan")) return "Unknown option";
++    if (!setting || !*setting) return "Fan must be an integer from 0 to 100";
++    errno = 0;
++    fan = strtol(setting, &end, 10);
++    if (errno || end == setting || *end || fan < 0 || fan > 100)
++        return "Fan must be an integer from 0 to 100";
++    mutex_lock(baikal->mutex);
++    info->fan_auto = false;
++    info->fan_requested = fan;
++    info->fan_pending = true;
++    info->fan_policy.cooling = false;
++    mutex_unlock(baikal->mutex);
++    return NULL;
++}
++
++/* Independent of pool work availability, but all USB traffic remains
++ * serialized with mining by the controller's existing mutex. */
++static void *baikal_fan_worker(void *arg)
++{
++    struct cgpu_info *baikal = arg;
++    struct baikal_info *info = baikal->device_data;
++    for (;;) {
++        mutex_lock(baikal->mutex);
++        bool stop = info->fan_stop;
++        mutex_unlock(baikal->mutex);
++        if (stop) break;
++        baikal_fan_tick(baikal, false);
++        cgsleep_ms(1000);
++    }
++    return NULL;
+ }
+ 
+ 
+@@ -326,6 +515,7 @@ static bool baikal_detect_remains(struct cgpu_info *baikal)
+         }
+ 
+         update_usb_stats(tmp);
++        info->fan_boards[index] = tmp;
+     }
+ 
+     return (true);
+@@ -360,7 +550,7 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+ 
+     if (opt_baikal_fan != NULL) {
+         sscanf(opt_baikal_fan, "%d", &fanspeed);
+-        if (fanspeed > BAIKAL_FANSPEED_MAX) {
++        if (fanspeed < 0 || fanspeed > BAIKAL_FANSPEED_MAX) {
+             fanspeed = BAIKAL_FANSPEED_DEF;
+         }
+     }
+@@ -374,6 +564,8 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+     info->cutofftemp    = (uint8_t)cutofftemp;
+     info->fanspeed      = (uint8_t)fanspeed;
+     info->recovertemp   = (uint8_t)recovertemp;
++    info->fan_requested = (uint8_t)fanspeed;
++    info->fan_hottest = -1;
+ 
+     baikal->device_data = info;
+     baikal->name        = strdup("BKLU");
+@@ -407,8 +599,12 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+     }
+ 
+     update_usb_stats(baikal);
++    info->fan_boards[0] = baikal;
+ 
+     baikal_detect_remains(baikal);
++    info->fan_applied_valid = true;
++    for (int i = 0; i < info->miner_count; i++)
++        if (!info->fan_boards[i]) info->fan_applied_valid = false;
+ 
+     return (baikal);
+ 
+@@ -451,10 +647,28 @@ static struct api_data* baikal_api_stats(struct cgpu_info *cgpu)
+ #else
+     root = api_add_int(root, "Clock", &miner->clock, false);
+ #endif
+-    root = api_add_int(root, "HWV", (int *)&miner->hw_ver, false);
+-    root = api_add_int(root, "FWV", (int *)&miner->fw_ver, false);
++    root = api_add_uint8(root, "HWV", &miner->hw_ver, true);
++    root = api_add_uint8(root, "FWV", &miner->fw_ver, true);
+     root = api_add_string(root, "Algo", (char *)algorithm_type_str[thr->cgpu->algorithm.type], false);
+ 
++    mutex_lock(cgpu->mutex);
++    root = api_add_string(root, "Fan Mode", info->fan_auto ? "auto" : "manual", true);
++    root = api_add_uint8(root, "Fan Requested", &info->fan_requested, true);
++    root = api_add_uint8(root, "Fan Acknowledged", &info->fanspeed, true);
++    root = api_add_bool(root, "Fan Acknowledged Valid", &info->fan_applied_valid, true);
++    root = api_add_bool(root, "Fan Pending", &info->fan_pending, true);
++    root = api_add_bool(root, "Fan Fault", &info->fan_fault, true);
++    root = api_add_bool(root, "Fan Telemetry Failsafe", &info->fan_telemetry_bad, true);
++    root = api_add_int(root, "Fan Hottest", &info->fan_hottest, true);
++    root = api_add_uint8(root, "Option Clock Selector", &miner->option_clock, true);
++    root = api_add_uint8(root, "Option Algorithm Mode", &miner->option_mode, true);
++    root = api_add_uint8(root, "Option Cutoff", &miner->option_cutoff, true);
++    uint64_t age = miner->temperature_seen ? baikal_fan_now() - miner->temperature_seen : UINT64_MAX;
++    root = api_add_uint64(root, "Temperature Age", &age, true);
++    bool fresh = miner->temperature_valid && age < BAIKAL_FAN_STALE_SECONDS;
++    root = api_add_bool(root, "Temperature Valid", &fresh, true);
++    mutex_unlock(cgpu->mutex);
++
+     return (root);
+ }
+ 
+@@ -572,11 +786,15 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+             work->thr_id = miner->thr_id;            
+         }
+         else {
+-            work = get_work(thr, miner->thr_id);            
++            /* Waiting on a pool must not prevent a fan failsafe. */
++            mutex_unlock(baikal->mutex);
++            work = get_work(thr, miner->thr_id);
++            mutex_lock(baikal->mutex);
+         }
+         miner->works[miner->work_idx] = work;
+         work->devflag = true;
+     }
++    work = miner->works[miner->work_idx];
+ 
+     if (work->pool->algorithm.type != thr->cgpu->algorithm.type) {
+         thr->cgpu->algorithm.type = work->pool->algorithm.type;
+@@ -587,7 +805,8 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+     set_target(work->device_target, work->device_diff, work->pool->algorithm.diff_multiplier2, work->thr_id);
+ 
+     memset(msg.data, 0x0, 512);
+-    msg.data[0] = to_baikal_algorithm(work->pool->algorithm.type);
++    algo = to_baikal_algorithm(work->pool->algorithm.type);
++    msg.data[0] = algo;
+     msg.data[1] = miner_id;
+     memcpy(&msg.data[2], &work->device_target[24], 8);
+     if (*((uint32_t *)&msg.data[6]) != 0x0) { // TripleS
+@@ -695,6 +914,9 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+ 
+     /* update clock */
+     miner->clock = msg.param << 1;
++    /* SET_OPTION uses the base algorithm mode, not SEND_WORK's optional
++     * midstate encoding. Keep it synchronized with the active work. */
++    miner->option_mode = algo;
+ 
+     miner->work_idx++;
+     if (miner->work_idx >= BAIKAL_WORK_FIFO) {
+@@ -723,7 +945,7 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+ 
+     for (i = 0; i < info->miner_count; i++) {
+         miner = &info->miners[i];
+-        if (miner->working == true) {
++        if (info->fan_boards[i] && miner->working == true) {
+             msg.miner_id    = i;
+             msg.cmd         = BAIKAL_GET_RESULT;
+             msg.dest        = 0;
+@@ -733,37 +955,42 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+             if (baikal_sendmsg(baikal, &msg) < 0) {
+                 applog(LOG_ERR, "baikal_process_result : sendmsg error");
+                 mutex_unlock(baikal->mutex);
++                baikal_fan_tick(baikal, true);
+                 return (false);
+             }
+ 
+-            if (baikal_readmsg(baikal, &msg, 23) < 0) {
++            if (baikal_readmsg(baikal, &msg, 23) != 23 ||
++                msg.cmd != BAIKAL_GET_RESULT || msg.miner_id != i || msg.len != 8) {
+                 applog(LOG_ERR, "baikal_process_result : readmsg error miner_id = %d", i);
+                 mutex_unlock(baikal->mutex);
++                baikal_fan_tick(baikal, true);
+                 return (false);
+             }
+-            mutex_unlock(baikal->mutex);
+-
+             miner->temp = msg.data[6];
++            miner->temperature_seen = baikal_fan_now();
++            miner->temperature_valid = miner->temp > 0 && miner->temp <= 100;
++            if (miner->temp > info->cutofftemp)
++                miner->overheated = true;
++            else if (miner->temperature_valid && miner->temp < info->recovertemp)
++                miner->overheated = false;
++            mutex_unlock(baikal->mutex);
+ 
+             if (msg.param & 0x01) {
+                 baikal_checknonce(baikal, &msg);
+             }
+ 
+             if (msg.param & 0x02) {
+-                baikal_send_work(baikal, i);
++                if (!baikal_send_work(baikal, i)) {
++                    baikal_fan_tick(baikal, true);
++                    return false;
++                }
+             }
+ 
+             if (msg.param & 0x04) {
++                baikal_fan_tick(baikal, true);
+                 return false;
+             }
+ 
+-            if (miner->temp > info->cutofftemp) {
+-                miner->overheated = true;
+-            }
+-            else if (miner->temp < info->recovertemp) {
+-                miner->overheated = false;
+-            }
+-
+             cgsleep_ms(1);
+         }
+     }
+@@ -885,6 +1112,7 @@ static void baikal_update_work(struct cgpu_info *baikal)
+ 
+         for (i = 0; i < info->miner_count; i++) {
+             miner = &info->miners[i];
++            if (!info->fan_boards[i]) continue;
+ #if BAIKAL_CHECK_STALE
+             /* set work stale */
+             mutex_lock(baikal->mutex);
+@@ -915,6 +1143,13 @@ static bool baikal_init(struct thr_info *thr)
+ 
+     miner->thr_id               = thr->id;
+     cgtimer_time(&miner->start_time);
++    if (baikal->miner_id == 0) {
++        if (pthread_create(&info->fan_thread, NULL, baikal_fan_worker, baikal)) {
++            applog(LOG_ERR, "Baikal fan worker failed to start");
++            return false;
++        }
++        info->fan_thread_started = true;
++    }
+     return (true);
+ }
+ 
+@@ -925,6 +1160,14 @@ static void baikal_shutdown(struct thr_info *thr)
+     struct cgpu_info *baikal    = thr->cgpu;
+     struct baikal_info *info    = baikal->device_data;
+ 
++    if (baikal->miner_id == 0 && info->fan_thread_started) {
++        mutex_lock(baikal->mutex);
++        info->fan_stop = true;
++        mutex_unlock(baikal->mutex);
++        pthread_join(info->fan_thread, NULL);
++        info->fan_thread_started = false;
++    }
++
+     for (i = 0; i < info->miner_count; i++) {
+         struct miner_info *miner    = &info->miners[i];
+         struct thr_info *thr        = mining_thr[miner->thr_id];
+@@ -951,6 +1194,7 @@ struct device_drv baikalu_drv = {
+     .get_statline_before	= baikal_get_statline_before,
+     .get_api_stats			= baikal_api_stats,
+     .identify_device		= baikal_identify,
++    .set_device             = baikal_set_device,
+     .thread_prepare			= baikal_prepare,
+     .thread_init			= baikal_init,
+     .hash_work              = hash_driver_work,
+diff --git a/baikal-fan-policy.h b/baikal-fan-policy.h
+new file mode 100644
+index 0000000..6986707
+--- /dev/null
++++ b/baikal-fan-policy.h
+@@ -0,0 +1,42 @@
++/* Pure fan policy; timestamps are monotonic seconds. */
++#ifndef BAIKAL_FAN_POLICY_H
++#define BAIKAL_FAN_POLICY_H
++#include <stdbool.h>
++#include <stdint.h>
++#define BAIKAL_FAN_STALE_SECONDS 15
++#define BAIKAL_FAN_HOLD_SECONDS 60
++struct baikal_fan_policy { uint64_t cool_since; bool cooling; };
++static inline int baikal_fan_target(int temp)
++{
++    if (temp >= 51) return 100;
++    if (temp >= 48) return 65;
++    if (temp >= 45) return 40;
++    if (temp >= 40) return 25;
++    return 10;
++}
++static inline int baikal_fan_lower_boundary(int fan)
++{
++    if (fan >= 100) return 51;
++    if (fan >= 65) return 48;
++    if (fan >= 40) return 45;
++    if (fan >= 25) return 40;
++    return 0;
++}
++static inline int baikal_fan_next(struct baikal_fan_policy *p, int current,
++                                int hottest, bool valid, uint64_t now)
++{
++    int target = valid ? baikal_fan_target(hottest) : 100;
++    if (!valid || target >= current) { p->cooling = false; return target; }
++    if (hottest > baikal_fan_lower_boundary(current) - 2) {
++        p->cooling = false;
++        return current;
++    }
++    if (!p->cooling) { p->cooling = true; p->cool_since = now; }
++    if (now - p->cool_since < BAIKAL_FAN_HOLD_SECONDS) return current;
++    p->cooling = false;
++    if (current > 65) return 65;
++    if (current > 40) return 40;
++    if (current > 25) return 25;
++    return 10;
++}
++#endif
+diff --git a/tests/baikal-fan-test.c b/tests/baikal-fan-test.c
+new file mode 100644
+index 0000000..2991a8e
+--- /dev/null
++++ b/tests/baikal-fan-test.c
+@@ -0,0 +1,178 @@
++/* Offline tests exercise the actual driver with a mocked USB transport. */
++#include "../driver-baikalu.c"
++#include <assert.h>
++
++bool opt_debug, use_syslog, opt_log_output;
++int opt_log_level = LOG_ERR;
++static uint64_t fake_now = 1000;
++static int fail_id = -1, bad_reply, short_write, writes;
++static uint8_t last[15], history[64][15];
++
++void cgtimer_time(cgtimer_t *now) { now->tv_sec = fake_now; now->tv_nsec = 0; }
++void _applog(int priority, const char *str, bool force) { (void)priority; (void)str; (void)force; }
++void _quit(int status) { exit(status); }
++void cgsleep_ms(int ms)
++{
++    struct timespec wait = {0, (ms > 0 ? 1000000 : 0)};
++    nanosleep(&wait, NULL);
++}
++
++int _usb_write(struct cgpu_info *cgpu, int ii, int ep, char *buf,
++               size_t size, int *processed, int timeout, enum usb_cmds cmd)
++{
++    (void)cgpu; (void)ii; (void)ep; (void)timeout; (void)cmd;
++    assert(size == 15);
++    memcpy(last, buf, size);
++    assert(writes < 64);
++    memcpy(history[writes++], buf, size);
++    *processed = short_write ? 14 : size;
++    return 0;
++}
++int _usb_read(struct cgpu_info *cgpu, int ii, int ep, char *buf,
++              size_t size, int *processed, int timeout, const char *end,
++              enum usb_cmds cmd, bool once, bool cancellable)
++{
++    (void)cgpu; (void)ii; (void)ep; (void)timeout; (void)end;
++    (void)cmd; (void)once; (void)cancellable;
++    assert(size == 7);
++    if (last[1] == fail_id) { *processed = 0; return -1; }
++    uint8_t reply[] = {':', last[1], BAIKAL_SET_OPTION, 0, 0, '\r', '\n'};
++    if (bad_reply == 1) reply[1]++;
++    if (bad_reply == 2) reply[2]++;
++    memcpy(buf, reply, 7);
++    *processed = bad_reply == 3 ? 0 : 7;
++    return 0;
++}
++
++static void test_policy(void)
++{
++    int temps[] = {1,39,40,44,45,47,48,50,51,100};
++    int duties[] = {10,10,25,25,40,40,65,65,100,100};
++    for (unsigned i = 0; i < sizeof(temps)/sizeof(temps[0]); i++)
++        assert(baikal_fan_target(temps[i]) == duties[i]);
++    struct baikal_fan_policy p = {0};
++    assert(baikal_fan_next(&p, 10, 51, true, 100) == 100);
++    assert(baikal_fan_next(&p, 25, 39, true, 100) == 25);
++    assert(!p.cooling);
++    /* A warm excursion interrupts the continuous cooling requirement. */
++    assert(baikal_fan_next(&p, 65, 46, true, 400) == 65);
++    assert(baikal_fan_next(&p, 65, 47, true, 430) == 65);
++    assert(baikal_fan_next(&p, 65, 46, true, 450) == 65);
++    assert(baikal_fan_next(&p, 65, 46, true, 509) == 65);
++    assert(baikal_fan_next(&p, 65, 46, true, 510) == 40);
++    assert(baikal_fan_next(&p, 25, 38, true, 101) == 25);
++    assert(baikal_fan_next(&p, 25, 38, true, 160) == 25);
++    assert(baikal_fan_next(&p, 25, 38, true, 161) == 10);
++    assert(baikal_fan_next(&p, 100, 35, true, 200) == 100);
++    assert(baikal_fan_next(&p, 100, 35, true, 260) == 65);
++    assert(baikal_fan_next(&p, 65, 35, true, 261) == 65);
++    assert(baikal_fan_next(&p, 65, 35, false, 300) == 100);
++    assert(!p.cooling);
++}
++
++int main(void)
++{
++    test_policy();
++    struct baikal_info info = {0};
++    struct cgpu_info boards[3] = {0};
++    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
++    char reply[1024];
++    info.miner_count = 3;
++    info.fanspeed = info.fan_requested = 100;
++    info.fan_applied_valid = true;
++    for (int i = 0; i < 3; i++) {
++        boards[i].miner_id = i;
++        boards[i].device_data = &info;
++        boards[i].mutex = &lock;
++        info.fan_boards[i] = &boards[i];
++        assert(baikal_setoption(&boards[i], 400, 0x34 + i, 55, 100));
++        info.miners[i].clock = 480;
++        info.miners[i].temperature_seen = fake_now;
++        info.miners[i].temperature_valid = true;
++        info.miners[i].temp = 35 + i;
++    }
++    writes = 0;
++    char *invalid[] = {"", "-1", "101", "10x", "1.5", "9999999999999999999999999"};
++    for (unsigned i = 0; i < sizeof(invalid)/sizeof(invalid[0]); i++)
++        assert(baikal_set_device(&boards[1], "fan", invalid[i], reply));
++    assert(writes == 0);
++    assert(!baikal_set_device(&boards[1], "fan", "10", reply));
++    assert(writes == 0 && info.fan_pending);
++    baikal_fan_tick(&boards[0], false);
++    assert(writes == 3 && info.fanspeed == 10 && !info.fan_auto);
++    for (int i = 0; i < 3; i++) {
++        assert(history[i][1] == i);
++        assert(history[i][6] == 2); /* Preserve requested 400 selector, not reported 480. */
++        assert(history[i][8] == 0x34 + i);
++        assert(history[i][10] == 55);
++        assert(history[i][12] == 10);
++    }
++    assert(!baikal_set_device(&boards[2], "fan-auto", "on", reply));
++    info.miners[1].temp = 51;
++    baikal_fan_tick(&boards[0], false);
++    assert(info.fanspeed == 100 && info.fan_hottest == 51);
++    info.miners[1].temp = 35;
++    info.miners[2].temperature_seen = fake_now - 15;
++    baikal_fan_tick(&boards[0], false);
++    assert(info.fanspeed == 100 && info.fan_hottest == -1);
++    info.miners[2].temperature_seen = fake_now;
++    info.miners[2].temperature_valid = false;
++    baikal_fan_tick(&boards[0], false);
++    assert(info.fanspeed == 100 && info.fan_hottest == -1);
++    info.miners[2].temperature_valid = true;
++    info.fan_boards[2] = NULL;
++    assert(!baikal_fan_apply_locked(&boards[0], 100));
++    assert(!info.fan_applied_valid);
++    info.fan_boards[2] = &boards[2];
++    for (int bad = 1; bad <= 3; bad++) {
++        bad_reply = bad;
++        assert(!baikal_fan_apply_locked(&boards[0], 25));
++        assert(!info.fan_applied_valid);
++    }
++    bad_reply = 0;
++    short_write = 1;
++    assert(!baikal_fan_apply_locked(&boards[0], 25));
++    short_write = 0;
++    /* A mid-broadcast failure must attempt the remaining board and then
++     * broadcast 100 to all three, leaving acknowledgement explicitly unknown. */
++    writes = 0;
++    fail_id = 1;
++    assert(!baikal_set_device(&boards[0], "fan", "25", reply));
++    baikal_fan_tick(&boards[0], false);
++    assert(writes == 6 && info.fan_fault && !info.fan_applied_valid);
++    assert(history[2][1] == 2);
++    for (int i = 3; i < 6; i++) assert(history[i][12] == 100);
++    fail_id = -1;
++    fake_now += 5;
++    for (int i = 0; i < 3; i++) info.miners[i].temperature_seen = fake_now;
++    baikal_fan_tick(&boards[0], false);
++    assert(info.fanspeed == 100 && info.fan_applied_valid && info.fan_fault);
++    assert(!baikal_set_device(&boards[0], "fan-reset", "yes", reply));
++    assert(!info.fan_fault);
++    fake_now += 16;
++    info.fan_fault = true;
++    assert(baikal_set_device(&boards[0], "fan-reset", "yes", reply));
++    /* The worker must apply stale-telemetry fallback without result polling. */
++    info.fan_fault = false;
++    info.fan_auto = true;
++    info.fanspeed = 10;
++    info.fan_applied_valid = true;
++    info.fan_retry_after = 0;
++    info.fan_stop = false;
++    pthread_t worker;
++    assert(!pthread_create(&worker, NULL, baikal_fan_worker, &boards[0]));
++    bool applied = false;
++    for (int attempt = 0; attempt < 100; attempt++) {
++        pthread_mutex_lock(&lock);
++        applied = info.fanspeed == 100;
++        if (applied) info.fan_stop = true;
++        pthread_mutex_unlock(&lock);
++        if (applied) break;
++        cgsleep_ms(1);
++    }
++    assert(applied);
++    assert(!pthread_join(worker, NULL));
++    pthread_mutex_destroy(&lock);
++    puts("Baikal fan policy and mocked USB driver tests passed");
++    return 0;
++}
+diff --git a/tests/run-baikal-fan-tests.sh b/tests/run-baikal-fan-tests.sh
+new file mode 100644
+index 0000000..866324b
+--- /dev/null
++++ b/tests/run-baikal-fan-tests.sh
+@@ -0,0 +1,8 @@
++#!/bin/sh
++set -eu
++cd "$(dirname "$0")/.."
++${CC:-cc} -std=gnu99 -O1 -g -fcommon -ffunction-sections -fdata-sections \
++    ${TEST_CFLAGS:-} -I. -Ilib -Isubmodules/jansson/src \
++    -Isubmodules/libusb-bk/libusb tests/baikal-fan-test.c \
++    -Wl,--gc-sections -lpthread -o tests/baikal-fan-test
++./tests/baikal-fan-test
