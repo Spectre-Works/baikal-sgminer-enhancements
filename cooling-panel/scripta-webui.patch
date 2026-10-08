@@ -1,0 +1,20 @@
+--- a/index.php
++++ b/index.php
+@@ -126,6 +126,7 @@
+ </script>
+ <script src="ng/controllers.js">
+ </script>
++<script src="ng/cooling.js"></script>
+ <script src="ng/filters.js">
+ </script>
+ <script src="ng/directives.js">
+--- a/partials/status.html
++++ b/partials/status.html
+@@ -41,6 +41,7 @@
+ 
+ <br ng-hide="status.devs">
+ <div ng-hide="status.devs" class='alert alert-danger'>No devices running</div>
++<div ng-include="'partials/fan.html'"></div>
+ <h3 ng-show="status.devs">Devices</h3>
+ <table ng-show="status.devs" id="statusDevs" class="table table-bordered table-right table-hover">
+   <thead>

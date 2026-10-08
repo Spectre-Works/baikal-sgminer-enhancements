@@ -9,9 +9,9 @@ covering compatibility, behavior, installation, usage, and verification.
 
 ## Stable fan-control release
 
-[v0.2.0 — Automatic BK-B fan control](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.2.0) includes an ARM hard-float binary, the complete corresponding source, a cumulative patch, documentation, and SHA-256 checksums. See the [installation/build guide](docs/release-v0.2.0.md) and [fan-control API guide](docs/automatic-fan-control.md).
+[v0.3.0 — Live fan control + webUI Cooling panel](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.0) includes the fan-only ARM hard-float binary and complete corresponding source, Automatic/Manual cooling controls in Scripta, optional saved startup preferences, tests, documentation, and SHA-256 checksums. See the [release guide](docs/release-v0.3.0.md), [Cooling panel installation guide](docs/cooling-panel.md), and [fan-control API guide](docs/automatic-fan-control.md). The miner executable is unchanged from v0.2.0; this release adds the webUI integration and startup helper.
 
-This release contains **no experimental live clock or overclock API**. The 480 MHz reported by some controllers is not proof of physical overclocking. Automatic mode must be explicitly enabled after each restart; the curve monitors hash boards, not the host CPU, and fan telemetry is command acknowledgement rather than measured RPM.
+This release contains **no experimental live clock or overclock API**. The 480 MHz reported by some controllers is not proof of physical overclocking. Automatic mode remains runtime-only in the miner itself; the optional Cooling panel startup helper restores a saved preference. The curve monitors hash boards, not the host CPU, and fan telemetry is command acknowledgement rather than measured RPM. Actual production restart-persistence validation remains pending; simulated startup tests pass.
 
 ## Patch catalog
 
@@ -19,11 +19,13 @@ This release contains **no experimental live clock or overclock API**. The 480 M
 | --- | --- | --- |
 | Live fan-speed control | [`0001-live-baikal-fan-control.patch`](patches/0001-live-baikal-fan-control.patch) | [Live fan-speed control](docs/live-fan-control.md) |
 | Automatic fan control (cumulative replacement for 0001) | [`0002-automatic-baikal-fan-control.patch`](patches/0002-automatic-baikal-fan-control.patch) | [Automatic fan control](docs/automatic-fan-control.md) |
+| Scripta Cooling panel and startup preference helper | [`cooling-panel/`](cooling-panel/) | [Cooling panel](docs/cooling-panel.md) |
 
 ## Repository layout
 
 - `patches/` contains numbered patches intended for clean upstream checkouts.
 - `docs/` contains the detailed documentation for each enhancement.
+- `cooling-panel/` contains the fan-only PHP/Angular integration, startup helper, integration patches and tests; it does not replace the stock dashboard wholesale.
 
 ## Applying patches
 

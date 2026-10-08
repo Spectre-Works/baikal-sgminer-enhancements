@@ -1,0 +1,12 @@
+--- a/miner-start.sh
++++ b/miner-start.sh
+@@ -3,5 +3,8 @@
+ if [ "$cgminer" == "" ]
+         then
+         echo `date +"%Y-%m-%d %T"`" sgminer is not running, starting now..."
+-/usr/bin/screen -dmS sgminer /opt/scripta/bin/sgminer -c /opt/scripta/etc/miner.conf --api-listen
++# Start conservatively; saved fan preferences are applied after telemetry is ready.
++/usr/bin/screen -dmS sgminer /opt/scripta/bin/sgminer -c /opt/scripta/etc/miner.conf --api-listen --baikal-fan 100
+ fi
++# Bounded, once-per-process restoration; it does not depend on a browser.
++/usr/bin/python /usr/local/libexec/bkb-cooling-startup.py --background

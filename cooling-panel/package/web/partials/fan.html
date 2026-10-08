@@ -1,0 +1,45 @@
+<section class="panel panel-default" ng-controller="CtrlCooling">
+  <div class="panel-heading"><h3 class="panel-title">Cooling <small>Shared fan — all three hash boards</small></h3></div>
+  <div class="panel-body">
+    <div class="alert alert-danger" ng-show="cooling.error" role="alert">{{cooling.error}}</div>
+    <div class="alert alert-info" ng-show="cooling.message" role="status">{{cooling.message}}</div>
+    <div class="alert alert-warning" ng-show="!cooling.fresh">Status unavailable or stale. Last known readings are not current.</div>
+    <div ng-show="cooling.state">
+      <p><strong>Running mode:</strong> {{cooling.state.mode === 'auto' ? 'Automatic' : 'Manual'}} &nbsp;
+        <strong>Acknowledged duty:</strong> {{cooling.state.ack_valid ? cooling.state.acknowledged + '%' : 'Unknown'}} &nbsp;
+        <strong>Requested:</strong> {{cooling.state.requested}}%</p>
+      <p><strong>Hottest hash board:</strong> {{cooling.state.hottest === null ? 'Unknown' : cooling.state.hottest + '°C'}} &nbsp;
+        Last successful update: {{cooling.updated | date:'HH:mm:ss'}}</p>
+      <p class="text-warning" ng-show="cooling.state.pending">Applying a cooling command…</p>
+      <p class="text-danger" ng-show="cooling.state.fault">Communication fault latched. Full cooling is requested; physical fan duty may be unknown.</p>
+      <p class="text-warning" ng-show="cooling.state.failsafe || !cooling.state.healthy">Hash-board temperature data is incomplete or stale. Automatic mode requests 100% cooling.</p>
+      <p class="text-success" ng-show="cooling.fresh && cooling.state.healthy && cooling.state.ack_valid && !cooling.state.fault && !cooling.state.pending && !cooling.state.failsafe">Cooling telemetry normal</p>
+    </div>
+    <form name="coolingForm" ng-submit="coolingApply()" novalidate>
+      <div class="row">
+        <div class="col-sm-4 form-group"><label for="cooling-mode">Mode</label>
+          <select id="cooling-mode" class="form-control" ng-model="cooling.mode" ng-disabled="cooling.busy || cooling.saving"><option value="auto">Automatic</option><option value="manual">Manual</option></select>
+        </div>
+        <div class="col-sm-4 form-group"><label for="cooling-duty">Manual duty / saved manual duty (%)</label>
+          <input id="cooling-duty" name="duty" type="number" min="10" max="100" step="1" required class="form-control" ng-model="cooling.duty" ng-disabled="cooling.busy || cooling.saving">
+        </div>
+      </div>
+      <p class="text-warning" ng-show="cooling.mode === 'manual'">Manual mode does not follow the temperature curve. Use Automatic for normal operation.</p>
+      <button type="submit" class="btn btn-primary" ng-disabled="!cooling.fresh || cooling.busy || cooling.saving || coolingForm.$invalid">Apply now</button>
+      <button type="button" class="btn btn-default" ng-click="coolingSave()" ng-disabled="!cooling.fresh || cooling.busy || cooling.saving || coolingForm.$invalid">Save for restart</button>
+      <button type="button" class="btn btn-warning" ng-click="coolingAction('full')" ng-disabled="!cooling.fresh || cooling.busy || cooling.saving">Full Cooling</button>
+      <button type="button" class="btn btn-default" ng-click="coolingAction('auto')" ng-disabled="!cooling.fresh || cooling.busy || cooling.saving">Restore Automatic</button>
+      <button type="button" class="btn btn-default" ng-show="cooling.state.fault" ng-click="coolingAction('reset')" ng-disabled="!cooling.fresh || cooling.busy || cooling.saving || !cooling.state.healthy || !cooling.state.ack_valid || cooling.state.pending">Clear recovered fault</button>
+      <button type="button" class="btn btn-link" ng-click="coolingRefresh()">Refresh</button>
+    </form>
+    <p><strong>Saved startup preference:</strong>
+      {{cooling.startup ? (cooling.startup.mode === 'auto' ? 'Automatic' : 'Manual ' + cooling.startup.duty + '%') : 'None — Manual 100% at startup'}}.
+      Save for restart does not change the running setting. Apply now does not save it.</p>
+    <p class="text-warning" ng-show="cooling.startupError">{{cooling.startupError}}</p>
+    <p class="help-block">Duty is an acknowledged command, not measured RPM or proof of fan rotation. The existing Pi/host temperature display is separate; it is not used by this curve.</p>
+    <details><summary>Automatic curve and recovery behavior</summary>
+      <p>Below 40°C: 10% · 40–44°C: 25% · 45–47°C: 40% · 48–50°C: 65% · 51°C and above: 100%.</p>
+      <p>Increases are immediate at the next governor check. Reductions require 60 seconds at least 2°C below the current step threshold and move one step at a time. Invalid or missing board telemetry forces full cooling in automatic mode. The original thermal cutoff remains unchanged.</p>
+    </details>
+  </div>
+</section>
