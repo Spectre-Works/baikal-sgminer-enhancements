@@ -15,6 +15,8 @@ This release contains **no experimental live clock or overclock API**. The 480 M
 
 ## Patch catalog
 
+[v0.3.1 — Unified installer preview](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.1) provides a single-download, backed-up workflow for the unchanged v0.3.0 miner and Cooling panel. See the [installer guide](docs/unified-installer.md). It is a **prerelease** with 20 passing offline installer tests; a live installer maintenance-cycle test is still pending. v0.3.0 remains the latest stable release.
+
 | Enhancement | Patch | Documentation |
 | --- | --- | --- |
 | Live fan-speed control | [`0001-live-baikal-fan-control.patch`](patches/0001-live-baikal-fan-control.patch) | [Live fan-speed control](docs/live-fan-control.md) |
