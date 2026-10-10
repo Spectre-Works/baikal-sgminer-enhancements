@@ -9,13 +9,17 @@ covering compatibility, behavior, installation, usage, and verification.
 
 ## Stable fan-control release
 
+[v0.3.2 — Visible modification identity + unified installer](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.2) identifies the modification and version in the Cooling panel, links to GitHub, and bundles the updated panel with the unchanged fan-only miner and complete corresponding source. See the [release guide](docs/release-v0.3.2.md) and [unified installer guide](docs/unified-installer.md). The installer transaction/restart and saved Automatic preference restoration completed on the live BK-B on 8 October; live rollback and physical fault qualification remain untested.
+
+### Previous releases
+
 [v0.3.0 — Live fan control + webUI Cooling panel](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.0) includes the fan-only ARM hard-float binary and complete corresponding source, Automatic/Manual cooling controls in Scripta, optional saved startup preferences, tests, documentation, and SHA-256 checksums. See the [release guide](docs/release-v0.3.0.md), [Cooling panel installation guide](docs/cooling-panel.md), and [fan-control API guide](docs/automatic-fan-control.md). The miner executable is unchanged from v0.2.0; this release adds the webUI integration and startup helper.
 
-This release contains **no experimental live clock or overclock API**. The 480 MHz reported by some controllers is not proof of physical overclocking. Automatic mode remains runtime-only in the miner itself; the optional Cooling panel startup helper restores a saved preference. The curve monitors hash boards, not the host CPU, and fan telemetry is command acknowledgement rather than measured RPM. Actual production restart-persistence validation remains pending; simulated startup tests pass.
+These releases contain **no experimental live clock or overclock API**. The 480 MHz reported by some controllers is not proof of physical overclocking. Automatic mode remains runtime-only in the miner itself; the optional Cooling panel startup helper restores a saved preference. The curve monitors hash boards, not the host CPU, and fan telemetry is command acknowledgement rather than measured RPM. Production miner-restart preference restoration was validated on 8 October; full reboot and physical fault qualification remain untested.
 
 ## Patch catalog
 
-[v0.3.1 — Unified installer preview](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.1) provides a single-download, backed-up workflow for the unchanged v0.3.0 miner and Cooling panel. See the [installer guide](docs/unified-installer.md). It is a **prerelease** with 20 passing offline installer tests; a live installer maintenance-cycle test is still pending. v0.3.0 remains the latest stable release.
+[v0.3.1 — Unified installer preview](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.1) is the historical prerelease of the unified workflow, superseded by v0.3.2. Its live installation/restart was subsequently validated on 8 October. Original tagged release notes retain their publication-time validation scope.
 
 | Enhancement | Patch | Documentation |
 | --- | --- | --- |

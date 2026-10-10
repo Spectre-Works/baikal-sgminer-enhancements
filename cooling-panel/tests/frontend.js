@@ -1,4 +1,15 @@
 const assert=require('assert'),fs=require('fs'),vm=require('vm');
+// Identification remains visible even when miner telemetry is unavailable.
+const template=fs.readFileSync(__dirname+'/../package/web/partials/fan.html','utf8');
+const identity=template.match(/<div class="panel-footer">([\s\S]*?)<\/div>/);
+assert(identity,'Visible modification identification footer is required');
+assert(identity[1].includes('Modified software:'));
+assert(identity[1].includes('Baikal sgminer enhancements'));
+assert(identity[1].includes('<span>v0.3.2</span>'));
+assert(identity[1].includes('Live fan control + Cooling panel'));
+assert(identity[1].includes('href="https://github.com/Spectre-Works/baikal-sgminer-enhancements"'));
+assert(identity[1].includes('target="_blank" rel="noopener noreferrer"'));
+assert(!/ng-(?:show|if|hide)|\{\{/.test(identity[0]),'Identification must not depend on API status');
 let controller;
 const angular={module:()=>({controller:(name,fn)=>{controller=fn;}})};
 vm.runInNewContext(fs.readFileSync(__dirname+'/../package/web/ng/cooling.js','utf8'),{angular,Date,Math});

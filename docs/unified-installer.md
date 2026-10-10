@@ -1,19 +1,19 @@
-# Unified BK-B fan-control + Cooling panel installer — v0.3.1 preview
+# Unified BK-B fan-control + Cooling panel installer — v0.3.2
 
-This installer installs the **v0.3.0 fan-only miner binary, Cooling panel and startup preference helper together**. It needs Python 3.5+ on the matching ARMv7 Ubuntu 16.04 BK-B/Scripta controller. It deliberately does not support unidentified models, ARM64 or modern Pi operating systems. No firmware is flashed, no clock API is added, and pool configuration is never rewritten.
+This installer installs the **unchanged v0.3.0 fan-only miner binary, v0.3.2 Cooling panel and startup preference helper together**. It needs Python 3.5+ on the matching ARMv7 Ubuntu 16.04 BK-B/Scripta controller. It deliberately does not support unidentified models, ARM64 or modern Pi operating systems. No firmware is flashed, no clock API is added, and pool configuration is never rewritten.
 
-Status: [v0.3.1 installer prerelease](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.1), tested offline against temporary filesystems and simulated services/API. The underlying panel was tested live; **this combined binary-replacement/restart workflow has not yet been validated on the live miner**. Do not treat simulation coverage as a hardware qualification. v0.3.0 is unchanged and remains the latest stable release.
+Status: [v0.3.2 release](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.2). The installer transaction, binary replacement/restart and saved preference restoration completed on the live BK-B on 8 October using v0.3.1. This version only updates panel identification and release asset pins. Live rollback, full reboot and physical fault qualification remain untested; do not treat simulated failure coverage as hardware qualification.
 
 ## Simple installation
 
-Download `bkb-fan-and-cooling-unified-installer-v0.3.1.tar.gz` from the v0.3.1 release. Verify the outer release checksum manifest, then extract it into a new staging directory outside `/var/www` and enter `unified-installer-v0.3.1/`. It contains the installer, unchanged v0.3.0 release assets, licenses and these instructions. Do not copy the whole directory into the web root.
+Download `bkb-fan-and-cooling-unified-installer-v0.3.2.tar.gz` from the v0.3.2 release. Verify the outer release checksum manifest, then extract it into a new staging directory outside `/var/www` and enter `unified-installer-v0.3.2/`. It contains the installer, pinned payloads, complete miner source, licenses and these instructions. Do not copy the whole directory into the web root.
 
-For the all-in-one bundle, verify all staged files with `sha256sum -c INSTALLER-SHA256SUMS` before running anything. The original v0.3.0 `SHA256SUMS` is also included inside the bundle. Do not overwrite it with the outer v0.3.1 release manifest. The installer checks the exact two required asset hashes whether you use the bundle or individual downloads.
+For the all-in-one bundle, verify all staged files with `sha256sum -c INSTALLER-SHA256SUMS` before running anything. The internal `SHA256SUMS` covers this bundle's payloads; do not overwrite it with the outer release manifest. The installer checks the exact two required asset hashes whether you use the bundle or individual downloads.
 
-Alternatively, put `install-bkb-cooling.py` beside these three files from the trusted [v0.3.0 release](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.0):
+Alternatively, put `install-bkb-cooling.py` beside these three files from the trusted [v0.3.2 release](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.2):
 
 - `sgminer-baikal-bkb-fan-v0.3.0-armhf`
-- `bkb-cooling-panel-v0.3.0.tar.gz`
+- `bkb-cooling-panel-v0.3.2.tar.gz`
 - `SHA256SUMS`
 
 The miner source archive is also available in that release; no compilation is required for installation. Download from the trusted repository, inspect the installer, and retain backups outside the public web directory. Checksums establish consistency, not independent author identity. The installer additionally pins the exact binary and panel archive hashes and does not download or run arbitrary remote scripts.
@@ -40,7 +40,7 @@ After success, open the miner's existing Status page and hard-refresh. Verify al
 
 ## What the installer does
 
-1. Checks the pinned v0.3.0 binary/archive and reads only five explicitly named application members from the archive; tests and the test-login router are never installed.
+1. Checks the pinned v0.3.0 binary and v0.3.2 panel archive and reads only five explicitly named application members from the archive; tests and the test-login router are never installed.
 2. Refuses unsupported/custom startup commands, missing/ambiguous dashboard hooks, symlinked installation paths, multiple/unidentified miner processes, unsafe board temperatures, incompatible libraries and invalid preferences.
 3. Creates a private root-owned mode-0700 recovery directory under `/var/backups/bkb-cooling-*`. The durable manifest records file hashes and original ownership/modes. A private copy of miner.conf is retained for manual recovery, but is never restored over later operator changes automatically. Backups contain private pool configuration: never publish them.
 4. Pauses cron, gracefully terminates only the verified miner PID and waits for it to exit. It does not force-kill the miner if graceful shutdown fails.
@@ -67,8 +67,8 @@ If the installer reports **CRITICAL: cron restoration failed**, check mining imm
 
 ## Validation scope
 
-Offline tests cover success, validation failure, partial write failure, graceful-stop failure, service-pause failure, interrupted stop, original restart, unchanged pool data, operator configuration edits, preference preservation, idempotence/permissions, custom hooks/startup rejection, corrupt/unknown backups, changed-file rollback refusal and watchdog restoration failures. Actual v0.3.0 asset hashes/ELF/archive members are verified locally.
+Offline tests cover success, validation failure, partial write failure, graceful-stop failure, service-pause failure, interrupted stop, original restart, unchanged pool data, operator configuration edits, preference preservation, idempotence/permissions, custom hooks/startup rejection, corrupt/unknown backups, changed-file rollback refusal and watchdog restoration failures. Actual pinned payload hashes/ELF/archive members are verified locally.
 
 Twenty installer tests passed, including an offline transaction/rollback using the actual pinned release binary and panel archive. The existing eight startup-helper tests and frontend tests also passed; Python 3.5 grammar compatibility was checked. No real service, API mutation or miner restart was used in these installer tests.
 
-Run `python3 cooling-panel/tests/installer.py` from the repository. Tests use a temporary filesystem and fake services/miner/API; they never restart a real miner. The installer itself has not yet been run through a real install/rollback maintenance cycle. Do not remove that caveat until it is validated on a suitable supervised device.
+Run `python3 cooling-panel/tests/installer.py` from the repository. Set `BKB_RELEASE_ASSETS` to the extracted bundle directory to include the actual-asset test. Tests use a temporary filesystem and fake services/miner/API; they never restart a real miner. Live install/restart succeeded on 8 October. Live rollback and physical fault qualification remain untested.

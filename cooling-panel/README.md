@@ -2,7 +2,7 @@
 
 See [installation, validation and rollback](../docs/cooling-panel.md) and the [v0.3.0 release guide](../docs/release-v0.3.0.md).
 
-The [v0.3.1 unified installer preview](../docs/unified-installer.md) installs the unchanged v0.3.0 miner, panel and startup helper together, with checks, explicit restart approval, private backups and recovery. It is a prerelease with offline test coverage, not yet validated through a live install/rollback cycle.
+The [v0.3.2 unified installer](../docs/unified-installer.md) installs the unchanged v0.3.0 fan-only miner and the v0.3.2 panel together, with checks, explicit restart approval, private backups and recovery. The panel visibly identifies the modification, its version and the GitHub source. The installer workflow completed a live installation/restart and preference restoration on 8 October; live rollback and fault-injection qualification remain untested.
 
 `package/web/` contains four new fan-only web files. `package/startup/` contains the optional once-per-process startup helper. The two integration patches add the controller/card to existing Scripta files and optionally add conservative startup plus preference restoration. They do not replace a customized dashboard or startup script wholesale.
 
