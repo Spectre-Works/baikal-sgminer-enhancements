@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BK-B unified installer v0.3.2, for pinned fan-only payloads.
+"""BK-B unified installer v0.3.3, for pinned fan-only payloads.
 
 Offline, root-only BK-B/Scripta installer. Python 3.5+, GPL-3.0.
 
@@ -26,9 +26,9 @@ import tempfile
 import time
 
 BIN_NAME = 'sgminer-baikal-bkb-fan-v0.3.0-armhf'
-PANEL_NAME = 'bkb-cooling-panel-v0.3.2.tar.gz'
+PANEL_NAME = 'bkb-cooling-panel-v0.3.3.tar.gz'
 PINS = {BIN_NAME: '7ed2720baeba0bfccd7c48d9ba2ad57d760fbea22b28faf888694158f56c406e',
-        PANEL_NAME: 'abd770cfe3cbe1b6c9f3df6a45a781bab922c154797c94f437d9b6be8475520c'}
+        PANEL_NAME: '76196e42aedf90a6c34146f1f4dd5c64c7ad44d0ac97f41e6e6a48b42c84f95f'}
 MINER = '/opt/scripta/bin/sgminer'
 CONFIG = '/opt/scripta/etc/miner.conf'
 START = '/opt/scripta/startup/miner-start.sh'
@@ -532,7 +532,7 @@ def already_installed(system, desired, owner=(0, 0), web_owner=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', action='version', version='BK-B unified installer v0.3.2 (v0.3.0 miner + v0.3.2 panel)')
+    parser.add_argument('--version', action='version', version='BK-B unified installer v0.3.3 (v0.3.0 miner + v0.3.3 panel)')
     parser.add_argument('--assets', help='Directory with the pinned miner, panel and SHA256SUMS')
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--check', action='store_true', help='Read-only compatibility checks (also the default)')

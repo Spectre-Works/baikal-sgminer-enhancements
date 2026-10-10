@@ -9,6 +9,8 @@ covering compatibility, behavior, installation, usage, and verification.
 
 ## Stable fan-control release
 
+[v0.3.3 — SPECTRE WORKS LLC branding](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.3) replaces the “Modified software” prefix with **SPECTRE WORKS LLC**, preserving the mod name, version and GitHub link. Includes the updated unified installer, panel source, unchanged fan-only binary and complete corresponding miner source. See the [release guide](docs/release-v0.3.3.md). Fan behavior, firmware and clocks are unchanged.
+
 [v0.3.2 — Visible modification identity + unified installer](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.2) identifies the modification and version in the Cooling panel, links to GitHub, and bundles the updated panel with the unchanged fan-only miner and complete corresponding source. See the [release guide](docs/release-v0.3.2.md) and [unified installer guide](docs/unified-installer.md). The installer transaction/restart and saved Automatic preference restoration completed on the live BK-B on 8 October; live rollback and physical fault qualification remain untested.
 
 ### Previous releases
