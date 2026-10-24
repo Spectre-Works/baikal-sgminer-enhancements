@@ -62,7 +62,7 @@ index 944b084..5267b55 100644
  
  typedef struct {
 diff --git a/driver-baikalu.c b/driver-baikalu.c
-index ad29f43..ddf34a3 100644
+index ad29f43..a506183 100644
 --- a/driver-baikalu.c
 +++ b/driver-baikalu.c
 @@ -11,6 +11,8 @@
@@ -126,7 +126,7 @@ index ad29f43..ddf34a3 100644
  
      mutex_unlock(baikal->mutex);
  
-@@ -229,37 +253,202 @@ static bool baikal_getinfo(struct cgpu_info *baikal)
+@@ -229,37 +253,205 @@ static bool baikal_getinfo(struct cgpu_info *baikal)
  }
  
  
@@ -213,10 +213,13 @@ index ad29f43..ddf34a3 100644
 +static void baikal_fan_tick(struct cgpu_info *baikal, bool transport_failed)
 +{
 +    struct baikal_info *info = baikal->device_data;
-+    uint64_t now = baikal_fan_now();
++    uint64_t now;
 +    bool valid = !transport_failed;
 +    int hottest = 0, target, previous, i;
 +    mutex_lock(baikal->mutex);
++    /* Board timestamps use this mutex too. Sample after locking so a fresh
++     * update cannot be newer than now and wrap the unsigned age calculation. */
++    now = baikal_fan_now();
 +    for (i = 0; i < info->miner_count; i++) {
 +        struct miner_info *miner = &info->miners[i];
 +        if (!info->fan_boards[i] || !miner->temperature_valid ||
@@ -338,7 +341,7 @@ index ad29f43..ddf34a3 100644
  }
  
  
-@@ -326,6 +515,7 @@ static bool baikal_detect_remains(struct cgpu_info *baikal)
+@@ -326,6 +518,7 @@ static bool baikal_detect_remains(struct cgpu_info *baikal)
          }
  
          update_usb_stats(tmp);
@@ -346,7 +349,7 @@ index ad29f43..ddf34a3 100644
      }
  
      return (true);
-@@ -360,7 +550,7 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+@@ -360,7 +553,7 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
  
      if (opt_baikal_fan != NULL) {
          sscanf(opt_baikal_fan, "%d", &fanspeed);
@@ -355,7 +358,7 @@ index ad29f43..ddf34a3 100644
              fanspeed = BAIKAL_FANSPEED_DEF;
          }
      }
-@@ -374,6 +564,8 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+@@ -374,6 +567,8 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
      info->cutofftemp    = (uint8_t)cutofftemp;
      info->fanspeed      = (uint8_t)fanspeed;
      info->recovertemp   = (uint8_t)recovertemp;
@@ -364,7 +367,7 @@ index ad29f43..ddf34a3 100644
  
      baikal->device_data = info;
      baikal->name        = strdup("BKLU");
-@@ -407,8 +599,12 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
+@@ -407,8 +602,12 @@ static struct cgpu_info* baikal_detect_one(struct libusb_device *dev, struct usb
      }
  
      update_usb_stats(baikal);
@@ -377,7 +380,7 @@ index ad29f43..ddf34a3 100644
  
      return (baikal);
  
-@@ -451,10 +647,28 @@ static struct api_data* baikal_api_stats(struct cgpu_info *cgpu)
+@@ -451,10 +650,28 @@ static struct api_data* baikal_api_stats(struct cgpu_info *cgpu)
  #else
      root = api_add_int(root, "Clock", &miner->clock, false);
  #endif
@@ -408,7 +411,7 @@ index ad29f43..ddf34a3 100644
      return (root);
  }
  
-@@ -572,11 +786,15 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -572,11 +789,15 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
              work->thr_id = miner->thr_id;            
          }
          else {
@@ -425,7 +428,7 @@ index ad29f43..ddf34a3 100644
  
      if (work->pool->algorithm.type != thr->cgpu->algorithm.type) {
          thr->cgpu->algorithm.type = work->pool->algorithm.type;
-@@ -587,7 +805,8 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -587,7 +808,8 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
      set_target(work->device_target, work->device_diff, work->pool->algorithm.diff_multiplier2, work->thr_id);
  
      memset(msg.data, 0x0, 512);
@@ -435,7 +438,7 @@ index ad29f43..ddf34a3 100644
      msg.data[1] = miner_id;
      memcpy(&msg.data[2], &work->device_target[24], 8);
      if (*((uint32_t *)&msg.data[6]) != 0x0) { // TripleS
-@@ -695,6 +914,9 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -695,6 +917,9 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
  
      /* update clock */
      miner->clock = msg.param << 1;
@@ -445,7 +448,7 @@ index ad29f43..ddf34a3 100644
  
      miner->work_idx++;
      if (miner->work_idx >= BAIKAL_WORK_FIFO) {
-@@ -723,7 +945,7 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+@@ -723,7 +948,7 @@ static bool baikal_process_result(struct cgpu_info *baikal)
  
      for (i = 0; i < info->miner_count; i++) {
          miner = &info->miners[i];
@@ -454,7 +457,7 @@ index ad29f43..ddf34a3 100644
              msg.miner_id    = i;
              msg.cmd         = BAIKAL_GET_RESULT;
              msg.dest        = 0;
-@@ -733,37 +955,42 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+@@ -733,37 +958,42 @@ static bool baikal_process_result(struct cgpu_info *baikal)
              if (baikal_sendmsg(baikal, &msg) < 0) {
                  applog(LOG_ERR, "baikal_process_result : sendmsg error");
                  mutex_unlock(baikal->mutex);
@@ -508,7 +511,7 @@ index ad29f43..ddf34a3 100644
              cgsleep_ms(1);
          }
      }
-@@ -885,6 +1112,7 @@ static void baikal_update_work(struct cgpu_info *baikal)
+@@ -885,6 +1115,7 @@ static void baikal_update_work(struct cgpu_info *baikal)
  
          for (i = 0; i < info->miner_count; i++) {
              miner = &info->miners[i];
@@ -516,7 +519,7 @@ index ad29f43..ddf34a3 100644
  #if BAIKAL_CHECK_STALE
              /* set work stale */
              mutex_lock(baikal->mutex);
-@@ -915,6 +1143,13 @@ static bool baikal_init(struct thr_info *thr)
+@@ -915,6 +1146,13 @@ static bool baikal_init(struct thr_info *thr)
  
      miner->thr_id               = thr->id;
      cgtimer_time(&miner->start_time);
@@ -530,7 +533,7 @@ index ad29f43..ddf34a3 100644
      return (true);
  }
  
-@@ -925,6 +1160,14 @@ static void baikal_shutdown(struct thr_info *thr)
+@@ -925,6 +1163,14 @@ static void baikal_shutdown(struct thr_info *thr)
      struct cgpu_info *baikal    = thr->cgpu;
      struct baikal_info *info    = baikal->device_data;
  
@@ -545,7 +548,7 @@ index ad29f43..ddf34a3 100644
      for (i = 0; i < info->miner_count; i++) {
          struct miner_info *miner    = &info->miners[i];
          struct thr_info *thr        = mining_thr[miner->thr_id];
-@@ -951,6 +1194,7 @@ struct device_drv baikalu_drv = {
+@@ -951,6 +1197,7 @@ struct device_drv baikalu_drv = {
      .get_statline_before	= baikal_get_statline_before,
      .get_api_stats			= baikal_api_stats,
      .identify_device		= baikal_identify,
@@ -603,10 +606,10 @@ index 0000000..6986707
 +#endif
 diff --git a/tests/baikal-fan-test.c b/tests/baikal-fan-test.c
 new file mode 100644
-index 0000000..2991a8e
+index 0000000..fa5a518
 --- /dev/null
 +++ b/tests/baikal-fan-test.c
-@@ -0,0 +1,178 @@
+@@ -0,0 +1,197 @@
 +/* Offline tests exercise the actual driver with a mocked USB transport. */
 +#include "../driver-baikalu.c"
 +#include <assert.h>
@@ -614,10 +617,22 @@ index 0000000..2991a8e
 +bool opt_debug, use_syslog, opt_log_output;
 +int opt_log_level = LOG_ERR;
 +static uint64_t fake_now = 1000;
++static pthread_mutex_t *clock_required_lock;
 +static int fail_id = -1, bad_reply, short_write, writes;
 +static uint8_t last[15], history[64][15];
 +
-+void cgtimer_time(cgtimer_t *now) { now->tv_sec = fake_now; now->tv_nsec = 0; }
++void cgtimer_time(cgtimer_t *now)
++{
++    /* With no competing thread, EBUSY proves the tick locked before sampling
++     * time. Sampling first could race a newer board timestamp and underflow. */
++    if (clock_required_lock) {
++        int result = pthread_mutex_trylock(clock_required_lock);
++        if (!result) pthread_mutex_unlock(clock_required_lock);
++        assert(result == EBUSY);
++    }
++    now->tv_sec = fake_now;
++    now->tv_nsec = 0;
++}
 +void _applog(int priority, const char *str, bool force) { (void)priority; (void)str; (void)force; }
 +void _quit(int status) { exit(status); }
 +void cgsleep_ms(int ms)
@@ -717,6 +732,13 @@ index 0000000..2991a8e
 +        assert(history[i][12] == 10);
 +    }
 +    assert(!baikal_set_device(&boards[2], "fan-auto", "on", reply));
++    /* Fresh low-temperature telemetry must not falsely request full cooling.
++     * Enforce the lock/clock ordering that prevents an unsigned age wrap. */
++    clock_required_lock = &lock;
++    baikal_fan_tick(&boards[0], false);
++    clock_required_lock = NULL;
++    assert(info.fanspeed == 10 && info.fan_hottest == 37);
++    assert(!info.fan_telemetry_bad && !info.fan_fault);
 +    info.miners[1].temp = 51;
 +    baikal_fan_tick(&boards[0], false);
 +    assert(info.fanspeed == 100 && info.fan_hottest == 51);

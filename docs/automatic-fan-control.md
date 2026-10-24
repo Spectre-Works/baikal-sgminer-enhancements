@@ -38,6 +38,15 @@ A fan change is sent to every registered board ID on the selected physical contr
 
 A small joinable controller worker calls the governor once per second. All state changes and complete broadcasts use the controller's existing USB mutex, so mining commands and algorithm updates cannot interleave with a fan broadcast.
 
+The governor samples monotonic time **after** acquiring the shared USB mutex,
+which also protects board temperature timestamps. Sampling before the lock
+could let a concurrent board update become newer than the sampled time;
+unsigned subtraction would then wrap and falsely trigger the 15-second stale
+telemetry fallback. The timestamp-order regression test checks that the tick
+holds the mutex when sampling time and keeps fresh, cool boards at low duty.
+This source correction does not change the curve, genuine stale-data fallback,
+USB fault handling, clock selectors, or published v0.2.0/v0.3.x binary assets.
+
 The worker is started by logical miner 0's initialization and joined at its shutdown. Cleanup attempts the 100% fallback before stopping the worker. Waiting for new pool work now releases the USB mutex, allowing stale telemetry to trigger the fallback during a pool outage.
 
 The 15-second threshold is evaluated on the next worker pass; actual application also depends on USB transfer latency. Complete USB loss prevents software from guaranteeing any physical fan setting. The logs and API distinguish acknowledged duty from unknown state. Existing firmware cutoff remains the hardware protection in that situation.

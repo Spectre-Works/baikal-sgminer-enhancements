@@ -7,6 +7,13 @@ Enhancements are maintained as standalone patches so they can be reviewed,
 tested, and adopted independently. Each patch has accompanying documentation
 covering compatibility, behavior, installation, usage, and verification.
 
+## Current source correction
+
+The cumulative automatic-fan patch now samples time after acquiring the shared
+USB mutex, preventing fresh board updates from falsely triggering the stale-data
+100% fallback. It includes a lock/clock-order regression test. Published
+v0.2.0/v0.3.x binaries are unchanged; see the [implementation notes](docs/automatic-fan-control.md#scheduling-and-locking).
+
 ## Stable fan-control release
 
 [v0.3.3 — SPECTRE WORKS LLC branding](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.3) replaces the “Modified software” prefix with **SPECTRE WORKS LLC**, preserving the mod name, version and GitHub link. Includes the updated unified installer, panel source, unchanged fan-only binary and complete corresponding miner source. See the [release guide](docs/release-v0.3.3.md). Fan behavior, firmware and clocks are unchanged.
