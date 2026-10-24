@@ -136,6 +136,41 @@ The full ARM executable is built natively on the BK-B controller for this releas
 
 The fan logic has been exercised on a live three-board BK-B, including acknowledged fan settings and automatic fan operation. The operator reported successful operation and testing. Fault injection remains an offline/mock test, not a deliberate live USB or fan disconnection. The newly packaged release binary is checked for ARM format, version output, dependency resolution, and absence of experimental clock commands; it is not installed during release packaging. No measured fan-RPM or independent physical-duty readback is available.
 
+## 24 October 2026 production deployment
+
+The timestamp-order correction in commit `a211139` was deployed to the observed
+three-board BK-B with explicit operator authorization. No rollback copy was
+created, as requested. Existing miner configuration and saved Automatic
+preference checksums remained unchanged, and the Scripta restart watchdog was
+restored after the executable replacement.
+
+The new native ARM executable SHA-256 is
+`f2debf8edc990240f4f586cb3dcc53f24e3d5ed3a6f6d87a05570ce8ebc0f792`.
+Its version string remains `5.6.2-BK_cod3gen_MOD`; published release assets were
+not replaced. The complete staged source and build manifest remain on the unit.
+Miner objects were rebuilt using GCC 5.4 and the release source's BK-B 400 MHz
+startup request. The existing static Baikal USB library was reused after all
+63 dependency C/header files matched the release source. A clean dependency
+build encountered pre-existing `LIBUSB_DESCRIBE`/`usbi_gettimeofday` errors;
+no USB dependency source changes were made for this fan fix. The top-level
+build also does not automatically build that static library.
+
+The new lock/clock-order regression failed with the old driver and passed with
+the correction. The full fan-policy/mock-USB suite passed both before and after
+native configuration; the cumulative patch applied cleanly to the documented
+upstream commit. ARM executable format, resolved runtime dependencies and
+version output were checked before installation. The running process checksum
+matched the new executable after deployment.
+
+During the initial supervised observation, Automatic mode restored successfully
+and acknowledged 100→65→40→25% steps. All three boards remained alive with fresh
+temperature samples, selector 2, algorithm mode 52 and cutoff 55°C. Reported
+hashrate settled around 92 GH/s, with three accepted shares, zero rejects and
+zero hardware errors by about 200 seconds after API readiness. No fan fault or
+telemetry failsafe was present in the sampled observations. These observations
+cover this unit and period; they do not establish the earlier incident's cause
+or constitute physical fan/RPM or fault-injection qualification.
+
 ## Deployment review checklist
 
 1. Build with the existing ARM toolchain and retain the BK-B's 400 MHz default.
