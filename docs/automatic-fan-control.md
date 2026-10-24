@@ -176,6 +176,34 @@ telemetry failsafe was present in the sampled observations. These observations
 cover this unit and period; they do not establish the earlier incident's cause
 or constitute physical fan/RPM or fault-injection qualification.
 
+## Versioned v0.3.4 deployment — 24 October 2026
+
+Release code commit `2acf24a` added visible runtime identity to the timestamp
+correction and was pushed before deployment. The production BK-B now runs
+`5.6.2-BK_cod3gen_MOD-spectreworks-v0.3.4`; its running executable SHA-256 is
+`b3a5704f692932f70f7afc23085e3399770656ec799cd9a484c992b4bb9e0928`.
+The `version` API and all three board stats report enhancement `0.3.4`.
+The authenticated live UI was checked and visibly displayed **Panel v0.3.4 ·
+Running miner: v0.3.4**. The deployed panel source archive SHA-256 is
+`d2ecd9263902e84e2a97c2b5bf2fd93ad2fa91431913564c7c2d861a06d6de79`.
+
+All 367 C/header/Automake/configure source inputs checked in the complete
+release source archive matched the native build tree. The 21 installer tests
+passed with actual pinned assets, and the supported controller's read-only
+installer preflight passed. Frontend, PHP backend, startup-helper and native
+fan/mock-USB checks passed; version checks cover current, legacy, invalid and
+mismatched runtime identities.
+
+The authorized deployment created no rollback copy. Configuration and saved
+Automatic preference checksums remained unchanged, and cron/watchdog operation
+was restored. Startup preference restoration was acknowledged. All three boards
+had fresh, healthy samples and retained selector 2, algorithm mode 52 and cutoff
+55°C. At 161 seconds after API readiness, Automatic cooling had stepped
+100→65→40%, reported hashrate was approximately 92.27 GH/s, and two shares were
+accepted with zero rejects/hardware errors. No fan fault or telemetry failsafe
+was observed in the sampled checks. This is a bounded observation of this unit,
+not a long-term or physical fan qualification.
+
 ## Deployment review checklist
 
 1. Build with the existing ARM toolchain and retain the BK-B's 400 MHz default.
