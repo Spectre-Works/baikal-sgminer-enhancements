@@ -1,6 +1,8 @@
 # Automatic Baikal fan control — implementation and review notes
 
-Release: v0.2.0 — 2026-10-07
+Current enhancement: v0.3.4 — 2026-10-24 (America/Denver)
+
+Original automatic-fan release: v0.2.0 — 2026-10-07
 
 Based on cod3gen/sgminer-baikal commit `3cde8deca53f83ac65bc685b988166bd17930753`. The fan controller has been used and tested on a live BK-B. See [release installation and build instructions](release-v0.2.0.md) for the source archive and matching ARM build. Experimental clock-control code is not part of this release.
 
@@ -45,7 +47,8 @@ unsigned subtraction would then wrap and falsely trigger the 15-second stale
 telemetry fallback. The timestamp-order regression test checks that the tick
 holds the mutex when sampling time and keeps fresh, cool boards at low duty.
 This source correction does not change the curve, genuine stale-data fallback,
-USB fault handling, clock selectors, or published v0.2.0/v0.3.x binary assets.
+USB fault handling, clock selectors, or previously published v0.2.0–v0.3.3 binary assets. The correction is
+packaged with visible miner identity in v0.3.4.
 
 The worker is started by logical miner 0's initialization and joined at its shutdown. Cleanup attempts the 100% fallback before stopping the worker. Waiting for new pool work now releases the USB mutex, allowing stale telemetry to trigger the fallback during a pool outage.
 
@@ -77,6 +80,8 @@ Any logical ASC on the same controller selects the same fan governor. Values out
 API setters queue requests for the worker. An `ascset` success means the request was accepted, not that the hardware has already acknowledged it. This differs from the original synchronous manual-fan patch. Check `Fan Pending`, `Fan Acknowledged Valid`, and `Fan Fault` before relying on a setting.
 
 Added stats fields:
+
+- Enhancement Version (v0.3.4 onward; also available from the version command);
 
 - Fan Mode, Fan Requested, Fan Acknowledged;
 - Fan Acknowledged Valid, Fan Pending, Fan Fault, Fan Telemetry Failsafe;

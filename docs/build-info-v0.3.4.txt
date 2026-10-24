@@ -1,0 +1,48 @@
+SPECTRE WORKS LLC — Baikal sgminer enhancements v0.3.4
+Release date: 2026-10-24 (America/Denver)
+Source repository/tag: Spectre-Works/baikal-sgminer-enhancements / v0.3.4
+Upstream: cod3gen/sgminer-baikal at 3cde8deca53f83ac65bc685b988166bd17930753
+
+Miner: sgminer-baikal-bkb-fan-v0.3.4-armhf
+SHA-256: b3a5704f692932f70f7afc23085e3399770656ec799cd9a484c992b4bb9e0928
+CLI: sgminer 5.6.2-BK_cod3gen_MOD-spectreworks-v0.3.4
+Enhancement Version API/stats: 0.3.4
+Panel/installer: v0.3.4
+
+Changes: cumulative automatic fan patch, timestamp sample under the USB lock,
+lock-order regression, enhancement-version header, CLI/TUI/API runtime identity,
+live miner identity in the panel, version consistency check and agent guidance.
+No firmware/clock API, pool configuration or network permission changes.
+BK-B source default: 400 MHz startup request, cutoff 55C, recovery 40C, fan 100%.
+Reported 480 MHz remains controller telemetry, not measured physical frequency.
+
+Native platform: armv7l, Ubuntu 16.04.2, GCC 5.4.0, glibc 2.23.
+Configure arguments: none. CFLAGS=-g -O2, CPPFLAGS empty.
+Build: existing configured source tree from explicit v0.3.0 source asset;
+changed miner/header consumers rebuilt with make -j1 CPPFLAGS= -o Makefile.am.
+The -o prevents regenerating already configured build files solely to add the
+new version header to the distribution file list; compiler dependencies still
+rebuild every source consumer of the changed miner header. The source asset
+contains the updated Makefile.am and header for future configuration.
+Unchanged hashing/dependency objects were reused from the preceding native build.
+Baikal static USB library SHA-256:
+b24b8c75518eef0a499ea09cec6d61988c9faf98d0c609bf4e7b914d2c198197
+All 63 bundled USB C/header files matched the existing native build tree.
+A clean USB dependency build hits legacy LIBUSB_DESCRIBE/usbi_gettimeofday
+errors; dependency source was not changed. The top-level Makefile also omits
+building the static USB archive automatically. This is not a fully reproducible
+clean-build claim. Complete bundled sources/licenses accompany the executable;
+configurations, credentials, binaries, build caches and logs are excluded.
+
+Version header and C source inputs match the native build. Verify the full
+release SHA256SUMS and INSTALLER-SHA256SUMS for the offline bundle. Identify a
+running deployment by its API enhancement version and /proc/PID/exe checksum,
+not the panel label alone. Published earlier releases remain unchanged.
+
+Validation: cumulative patch applies cleanly to documented upstream; native
+fan/mock-USB tests pass; timestamp-order regression fails before the correction;
+frontend/backend/startup checks and installer tests with pinned assets pass;
+Python 3.5 grammar compatibility checked; ARM format, version output and resolved
+dependencies checked. Production checks cover this observed BK-B/time only.
+Duty is command acknowledgement, not measured RPM. No physical fault injection,
+full reboot, cold-start fan or long-duration hardware qualification is claimed.

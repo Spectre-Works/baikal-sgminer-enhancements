@@ -197,6 +197,14 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(b'\r\n', desired['/var/www/index.php'])
         self.assertIn(b'pgrep -x sgminer', desired[m.START])
 
+    def test_runtime_version_must_match_release(self):
+        m.require_runtime_version({'miner_version': m.RELEASE_VERSION})
+        for value in [None, '', '0.3.3', '0.3.5', 34]:
+            with self.assertRaises(RuntimeError):
+                m.require_runtime_version({'miner_version': value})
+        with self.assertRaises(RuntimeError):
+            m.require_runtime_version({})
+
     def test_invalid_preference_fails_before_stop(self):
         for duty in [True, 9, 101, '25', 25.5]:
             with self.assertRaises(ValueError):

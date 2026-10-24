@@ -115,6 +115,8 @@ class CoolingService {
             $healthy=$healthy && $board['valid'];unset($board['row']);$output[]=$board;
         }
         return array('supported'=>true,'asc'=>$boards[0]['asc'],'mode'=>$first['Fan Mode'],
+            'miner_version'=>isset($first['Enhancement Version']) && is_string($first['Enhancement Version']) &&
+                preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/D',$first['Enhancement Version']) ? $first['Enhancement Version']:null,
             'requested'=>$first['Fan Requested'],'acknowledged'=>$first['Fan Acknowledged Valid'] ? $first['Fan Acknowledged']:null,
             'ack_valid'=>$first['Fan Acknowledged Valid'],'pending'=>$first['Fan Pending'],'fault'=>$first['Fan Fault'],
             'failsafe'=>$first['Fan Telemetry Failsafe'],'hottest'=>$first['Fan Hottest']<0 ? null:$first['Fan Hottest'],

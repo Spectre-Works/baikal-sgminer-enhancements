@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BK-B unified installer v0.3.3, for pinned fan-only payloads.
+"""BK-B unified installer v0.3.4, for pinned fan-only payloads.
 
 Offline, root-only BK-B/Scripta installer. Python 3.5+, GPL-3.0.
 
@@ -25,10 +25,11 @@ import tarfile
 import tempfile
 import time
 
-BIN_NAME = 'sgminer-baikal-bkb-fan-v0.3.0-armhf'
-PANEL_NAME = 'bkb-cooling-panel-v0.3.3.tar.gz'
-PINS = {BIN_NAME: '7ed2720baeba0bfccd7c48d9ba2ad57d760fbea22b28faf888694158f56c406e',
-        PANEL_NAME: '76196e42aedf90a6c34146f1f4dd5c64c7ad44d0ac97f41e6e6a48b42c84f95f'}
+RELEASE_VERSION = '0.3.4'
+BIN_NAME = 'sgminer-baikal-bkb-fan-v0.3.4-armhf'
+PANEL_NAME = 'bkb-cooling-panel-v0.3.4.tar.gz'
+PINS = {BIN_NAME: 'b3a5704f692932f70f7afc23085e3399770656ec799cd9a484c992b4bb9e0928',
+        PANEL_NAME: 'd2ecd9263902e84e2a97c2b5bf2fd93ad2fa91431913564c7c2d861a06d6de79'}
 MINER = '/opt/scripta/bin/sgminer'
 CONFIG = '/opt/scripta/etc/miner.conf'
 START = '/opt/scripta/startup/miner-start.sh'
@@ -154,6 +155,11 @@ def atomic(path, data, mode, uid, gid):
             os.unlink(tmp)  # Only this call's private, generated temporary file.
 
 
+def require_runtime_version(state):
+    if state.get('miner_version') != RELEASE_VERSION:
+        raise RuntimeError('Running miner enhancement version does not match release')
+
+
 class System:
     def path(self, name):
         return name
@@ -235,6 +241,7 @@ class System:
                 self.identity()
                 raw = self.command(['sudo', '-n', '-u', 'www-data', 'php', '-r', code])
                 state = json.loads(raw.decode('utf-8'))
+                require_runtime_version(state)
                 if state['mode'] == 'manual' and state['acknowledged'] == 100:
                     break
             except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired):
@@ -244,6 +251,7 @@ class System:
             raise RuntimeError('Miner/web-account readiness failed')
         self.command(['/usr/bin/python', HELPER, '--worker'], timeout=150)
         state = json.loads(self.command(['sudo', '-n', '-u', 'www-data', 'php', '-r', code]).decode('utf-8'))
+        require_runtime_version(state)
         pref = preference(read(PREF, 2048))
         if state['mode'] != pref['mode'] or (pref['mode'] == 'manual' and state['acknowledged'] != pref['duty']):
             raise RuntimeError('Startup preference was not acknowledged')
@@ -456,7 +464,9 @@ def preflight(system, files):
         atomic(binary, files[BIN_NAME], 0o755, 0, 0)
         if b'not found' in system.command(['ldd', binary]):
             raise ValueError('Release binary dependencies are missing')
-        system.command([binary, '--version'])
+        version = system.command([binary, '--version']).strip()
+        if not version.endswith(('-spectreworks-v' + RELEASE_VERSION).encode('ascii')):
+            raise ValueError('Staged miner version does not match release')
         for src in WEB:
             path = tmp + '/' + os.path.basename(src)
             atomic(path, files[src], 0o644, 0, 0)
@@ -532,7 +542,7 @@ def already_installed(system, desired, owner=(0, 0), web_owner=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', action='version', version='BK-B unified installer v0.3.3 (v0.3.0 miner + v0.3.3 panel)')
+    parser.add_argument('--version', action='version', version='BK-B unified installer v0.3.4 (v0.3.4 miner + v0.3.4 panel)')
     parser.add_argument('--assets', help='Directory with the pinned miner, panel and SHA256SUMS')
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--check', action='store_true', help='Read-only compatibility checks (also the default)')

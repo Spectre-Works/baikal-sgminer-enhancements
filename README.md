@@ -7,22 +7,24 @@ Enhancements are maintained as standalone patches so they can be reviewed,
 tested, and adopted independently. Each patch has accompanying documentation
 covering compatibility, behavior, installation, usage, and verification.
 
-## Current source correction
-
-The cumulative automatic-fan patch now samples time after acquiring the shared
-USB mutex, preventing fresh board updates from falsely triggering the stale-data
-100% fallback. It includes a lock/clock-order regression test. Published
-v0.2.0/v0.3.x binaries are unchanged; see the [implementation notes](docs/automatic-fan-control.md#scheduling-and-locking).
-
 ## Stable fan-control release
+
+[v0.3.4 — Fan timestamp fix and visible runtime version](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.4)
+fixes a lock/timestamp race that could falsely request 100% cooling with fresh,
+cool board telemetry. The miner now reports enhancement v0.3.4 in its CLI/TUI
+and API. The Cooling panel separately shows **Panel v0.3.4** and the actual
+running miner enhancement version, or an explicit unavailable/legacy identity.
+The release includes matching ARM binary, complete miner source, pinned unified
+installer, offline bundle and SHA-256 manifests. See the
+[release guide](docs/release-v0.3.4.md) and [versioning rules](AGENTS.md).
+
+### Previous releases
 
 [v0.3.3 — SPECTRE WORKS LLC branding](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.3) replaces the “Modified software” prefix with **SPECTRE WORKS LLC**, preserving the mod name, version and GitHub link. Includes the updated unified installer, panel source, unchanged fan-only binary and complete corresponding miner source. See the [release guide](docs/release-v0.3.3.md). Fan behavior, firmware and clocks are unchanged.
 
 [v0.3.2 — Visible modification identity + unified installer](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.2) identifies the modification and version in the Cooling panel, links to GitHub, and bundles the updated panel with the unchanged fan-only miner and complete corresponding source. See the [release guide](docs/release-v0.3.2.md) and [unified installer guide](docs/unified-installer.md). The installer transaction/restart and saved Automatic preference restoration completed on the live BK-B on 8 October; live rollback and physical fault qualification remain untested.
 
-### Previous releases
-
-[v0.3.0 — Live fan control + webUI Cooling panel](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.0) includes the fan-only ARM hard-float binary and complete corresponding source, Automatic/Manual cooling controls in Scripta, optional saved startup preferences, tests, documentation, and SHA-256 checksums. See the [release guide](docs/release-v0.3.0.md), [Cooling panel installation guide](docs/cooling-panel.md), and [fan-control API guide](docs/automatic-fan-control.md). The miner executable is unchanged from v0.2.0; this release adds the webUI integration and startup helper.
+[v0.3.0 — Live fan control + webUI Cooling panel](https://github.com/Spectre-Works/baikal-sgminer-enhancements/releases/tag/v0.3.0) includes the fan-only ARM hard-float binary and complete corresponding source, Automatic/Manual cooling controls in Scripta, optional saved startup preferences, tests, documentation, and SHA-256 checksums. See the [release guide](docs/release-v0.3.0.md), [Cooling panel installation guide](docs/cooling-panel.md), and [fan-control API guide](docs/automatic-fan-control.md). For v0.3.0, the miner executable is unchanged from v0.2.0; that release adds the webUI integration and startup helper.
 
 These releases contain **no experimental live clock or overclock API**. The 480 MHz reported by some controllers is not proof of physical overclocking. Automatic mode remains runtime-only in the miner itself; the optional Cooling panel startup helper restores a saved preference. The curve monitors hash boards, not the host CPU, and fan telemetry is command acknowledgement rather than measured RPM. Production miner-restart preference restoration was validated on 8 October; full reboot and physical fault qualification remain untested.
 

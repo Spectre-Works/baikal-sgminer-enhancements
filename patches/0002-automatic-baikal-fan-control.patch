@@ -1,12 +1,12 @@
 diff --git a/Makefile.am b/Makefile.am
-index a94dfe3..56f4f9d 100644
+index a94dfe3..5a63fbb 100644
 --- a/Makefile.am
 +++ b/Makefile.am
 @@ -51,6 +51,7 @@ sgminer_SOURCES += pool.c pool.h
  sgminer_SOURCES += algorithm.c algorithm.h
  sgminer_SOURCES += config_parser.c config_parser.h
  sgminer_SOURCES += events.c events.h
-+sgminer_SOURCES += baikal-fan-policy.h
++sgminer_SOURCES += baikal-fan-policy.h spectreworks-version.h
  
  sgminer_SOURCES += algorithm/scrypt.c algorithm/scrypt.h
  sgminer_SOURCES += algorithm/darkcoin.c algorithm/darkcoin.h
@@ -62,7 +62,7 @@ index 944b084..5267b55 100644
  
  typedef struct {
 diff --git a/driver-baikalu.c b/driver-baikalu.c
-index ad29f43..a506183 100644
+index ad29f43..f022167 100644
 --- a/driver-baikalu.c
 +++ b/driver-baikalu.c
 @@ -11,6 +11,8 @@
@@ -380,7 +380,7 @@ index ad29f43..a506183 100644
  
      return (baikal);
  
-@@ -451,10 +650,28 @@ static struct api_data* baikal_api_stats(struct cgpu_info *cgpu)
+@@ -451,10 +650,29 @@ static struct api_data* baikal_api_stats(struct cgpu_info *cgpu)
  #else
      root = api_add_int(root, "Clock", &miner->clock, false);
  #endif
@@ -391,6 +391,7 @@ index ad29f43..a506183 100644
      root = api_add_string(root, "Algo", (char *)algorithm_type_str[thr->cgpu->algorithm.type], false);
  
 +    mutex_lock(cgpu->mutex);
++    root = api_add_const(root, "Enhancement Version", SPECTRE_WORKS_VERSION, false);
 +    root = api_add_string(root, "Fan Mode", info->fan_auto ? "auto" : "manual", true);
 +    root = api_add_uint8(root, "Fan Requested", &info->fan_requested, true);
 +    root = api_add_uint8(root, "Fan Acknowledged", &info->fanspeed, true);
@@ -411,7 +412,7 @@ index ad29f43..a506183 100644
      return (root);
  }
  
-@@ -572,11 +789,15 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -572,11 +790,15 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
              work->thr_id = miner->thr_id;            
          }
          else {
@@ -428,7 +429,7 @@ index ad29f43..a506183 100644
  
      if (work->pool->algorithm.type != thr->cgpu->algorithm.type) {
          thr->cgpu->algorithm.type = work->pool->algorithm.type;
-@@ -587,7 +808,8 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -587,7 +809,8 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
      set_target(work->device_target, work->device_diff, work->pool->algorithm.diff_multiplier2, work->thr_id);
  
      memset(msg.data, 0x0, 512);
@@ -438,7 +439,7 @@ index ad29f43..a506183 100644
      msg.data[1] = miner_id;
      memcpy(&msg.data[2], &work->device_target[24], 8);
      if (*((uint32_t *)&msg.data[6]) != 0x0) { // TripleS
-@@ -695,6 +917,9 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
+@@ -695,6 +918,9 @@ static bool baikal_send_work(struct cgpu_info *baikal, int miner_id)
  
      /* update clock */
      miner->clock = msg.param << 1;
@@ -448,7 +449,7 @@ index ad29f43..a506183 100644
  
      miner->work_idx++;
      if (miner->work_idx >= BAIKAL_WORK_FIFO) {
-@@ -723,7 +948,7 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+@@ -723,7 +949,7 @@ static bool baikal_process_result(struct cgpu_info *baikal)
  
      for (i = 0; i < info->miner_count; i++) {
          miner = &info->miners[i];
@@ -457,7 +458,7 @@ index ad29f43..a506183 100644
              msg.miner_id    = i;
              msg.cmd         = BAIKAL_GET_RESULT;
              msg.dest        = 0;
-@@ -733,37 +958,42 @@ static bool baikal_process_result(struct cgpu_info *baikal)
+@@ -733,37 +959,42 @@ static bool baikal_process_result(struct cgpu_info *baikal)
              if (baikal_sendmsg(baikal, &msg) < 0) {
                  applog(LOG_ERR, "baikal_process_result : sendmsg error");
                  mutex_unlock(baikal->mutex);
@@ -511,7 +512,7 @@ index ad29f43..a506183 100644
              cgsleep_ms(1);
          }
      }
-@@ -885,6 +1115,7 @@ static void baikal_update_work(struct cgpu_info *baikal)
+@@ -885,6 +1116,7 @@ static void baikal_update_work(struct cgpu_info *baikal)
  
          for (i = 0; i < info->miner_count; i++) {
              miner = &info->miners[i];
@@ -519,7 +520,7 @@ index ad29f43..a506183 100644
  #if BAIKAL_CHECK_STALE
              /* set work stale */
              mutex_lock(baikal->mutex);
-@@ -915,6 +1146,13 @@ static bool baikal_init(struct thr_info *thr)
+@@ -915,6 +1147,13 @@ static bool baikal_init(struct thr_info *thr)
  
      miner->thr_id               = thr->id;
      cgtimer_time(&miner->start_time);
@@ -533,7 +534,7 @@ index ad29f43..a506183 100644
      return (true);
  }
  
-@@ -925,6 +1163,14 @@ static void baikal_shutdown(struct thr_info *thr)
+@@ -925,6 +1164,14 @@ static void baikal_shutdown(struct thr_info *thr)
      struct cgpu_info *baikal    = thr->cgpu;
      struct baikal_info *info    = baikal->device_data;
  
@@ -548,7 +549,7 @@ index ad29f43..a506183 100644
      for (i = 0; i < info->miner_count; i++) {
          struct miner_info *miner    = &info->miners[i];
          struct thr_info *thr        = mining_thr[miner->thr_id];
-@@ -951,6 +1197,7 @@ struct device_drv baikalu_drv = {
+@@ -951,6 +1198,7 @@ struct device_drv baikalu_drv = {
      .get_statline_before	= baikal_get_statline_before,
      .get_api_stats			= baikal_api_stats,
      .identify_device		= baikal_identify,
@@ -821,3 +822,48 @@ index 0000000..866324b
 +    -Isubmodules/libusb-bk/libusb tests/baikal-fan-test.c \
 +    -Wl,--gc-sections -lpthread -o tests/baikal-fan-test
 +./tests/baikal-fan-test
+diff --git a/api.c b/api.c
+index 0c7002c..e529ee7 100644
+--- a/api.c
++++ b/api.c
+@@ -1425,8 +1425,9 @@ static void apiversion(struct io_data *io_data, __maybe_unused SOCKETTYPE c, __m
+     message(io_data, MSG_VERSION, 0, NULL, isjson);
+     io_open = io_add(io_data, isjson ? COMSTR JSON_VERSION : _VERSION COMSTR);
+ 
+-    root = api_add_string(root, "Miner", PACKAGE " " VERSION, false);
++    root = api_add_string(root, "Miner", PACKAGE " " CGMINER_VERSION, false);
+     root = api_add_string(root, "SGMiner", CGMINER_VERSION, false);
++    root = api_add_const(root, "Enhancement Version", SPECTRE_WORKS_VERSION, false);
+     root = api_add_const(root, "API", APIVERSION, false);
+ 
+     root = print_data(root, buf, isjson, false);
+diff --git a/miner.h b/miner.h
+index 8235fe2..d3226b6 100644
+--- a/miner.h
++++ b/miner.h
+@@ -27,10 +27,12 @@ extern char *curly;
+ #define VERSION GIT_VERSION
+ #endif
+ 
++#include "spectreworks-version.h"
++
+ #ifdef BUILD_NUMBER
+-#define CGMINER_VERSION VERSION "-" BUILD_NUMBER
++#define CGMINER_VERSION VERSION "-" BUILD_NUMBER "-spectreworks-v" SPECTRE_WORKS_VERSION
+ #else
+-#define CGMINER_VERSION VERSION
++#define CGMINER_VERSION VERSION "-spectreworks-v" SPECTRE_WORKS_VERSION
+ #endif
+ 
+ #include "elist.h"
+diff --git a/spectreworks-version.h b/spectreworks-version.h
+new file mode 100644
+index 0000000..18b7513
+--- /dev/null
++++ b/spectreworks-version.h
+@@ -0,0 +1,5 @@
++/* SPECTRE WORKS enhancement release identity; independent of upstream/firmware. */
++#ifndef SPECTREWORKS_VERSION_H
++#define SPECTREWORKS_VERSION_H
++#define SPECTRE_WORKS_VERSION "0.3.4"
++#endif

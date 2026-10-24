@@ -1,28 +1,24 @@
-# WebUI modification identification (v0.3.3)
+# WebUI and runtime identification (v0.3.4)
 
-The Cooling panel footer displays **SPECTRE WORKS LLC**, identifies the package
-as **Baikal sgminer enhancements**, displays its version and describes the scope
-as **Live fan control + Cooling panel**. It links to the project's GitHub
-repository for source, releases and documentation. The v0.3.3 branding update
-replaces the original “Modified software” prefix with **SPECTRE WORKS LLC**.
-Previously published v0.3.2 archives remain unchanged.
+The Cooling panel footer displays **SPECTRE WORKS LLC**, identifies Baikal
+sgminer enhancements and shows **Panel v0.3.4**. This static identity remains
+visible when miner telemetry is unavailable. The adjacent **Running miner**
+value comes from the running binary's `Enhancement Version` stats field through
+`f_fan.php`; it is not inferred from the panel version or a saved preference.
 
-The label is part of `cooling-panel/package/web/partials/fan.html`. It is static,
-so it remains visible when miner telemetry is unavailable. GitHub is a normal
-outbound link, not an embedded resource or update check; loading the miner's page
-does not fetch anything from GitHub. The link opens in a separate tab with
-`noopener noreferrer`.
+Fresh compatible telemetry displays `v0.3.4`. Older binaries without that field
+are labeled `Unidentified (legacy binary)`. A missing/stale panel response shows
+`Unavailable`, rather than presenting a cached version as current. Both the
+native `--version`/startup/TUI string and the API `version` response carry the
+`-spectreworks-v0.3.4` suffix; the API also exposes `Enhancement Version: 0.3.4`.
+The API protocol version and hardware/firmware versions keep their own identities.
 
-This version identifies the enhancement/UI package, not the board firmware,
-the upstream sgminer version string or a measured clock frequency. The
-`v0.3.3` label identifies this release's UI package. Update the version in both
-the template and frontend test when preparing future releases; do not relabel
-previously published archives.
+The GitHub link remains a normal outbound link with `noopener noreferrer`.
+Loading the panel does not query GitHub. Hard-refresh after deployment to load
+the updated template. Never relabel previously published archives; VERSION and
+the release consistency check govern new package versions. See AGENTS.md.
 
-This change does not alter fan policy, clock behavior, pool configuration,
-startup settings or API permissions. The v0.3.3 installer pins the updated
-v0.3.3 panel archive and the unchanged v0.3.0 fan-only miner. Its bundle includes
-both payloads, complete corresponding miner source, licenses and checksums.
-
-Run `node cooling-panel/tests/frontend.js` to check the identity/link and the
-existing controller behavior.
+Run `node cooling-panel/tests/frontend.js`, the PHP backend tests and
+`python3 tools/check-release-version.py` before release. Backend checks cover
+legacy, invalid and current runtime identities. Live validation must also query
+the actual running API and compare `/proc/PID/exe` with the released binary.

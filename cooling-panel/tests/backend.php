@@ -18,6 +18,12 @@ $service=new CoolingService(function($command,$parameter) use (&$state,&$writes)
     return $state[$command];
 });
 expect($service->status()['acknowledged']===25,'Acknowledged duty');
+expect($service->status()['miner_version']===null,'Legacy miner must remain unidentified');
+foreach($state['stats']['STATS'] as &$r)$r['Enhancement Version']='0.3.4';unset($r);
+expect($service->status()['miner_version']==='0.3.4','Report actual miner enhancement version');
+foreach($state['stats']['STATS'] as &$r)$r['Enhancement Version']='invalid';unset($r);
+expect($service->status()['miner_version']===null,'Reject invalid version identity');
+$state=fixture();
 $service->apply(array('action'=>'manual','duty'=>40));
 $service->apply(array('action'=>'auto'));
 $service->apply(array('action'=>'full'));
